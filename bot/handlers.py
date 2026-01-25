@@ -1,7 +1,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 from .config import logger
-from .finance_api import get_stock_info, find_ticker
+from core.stock_service import get_stock_info, find_ticker
 from .formatting import format_exchange_rate_data, format_stock_data
 
 # --- 명령어 핸들러 함수 ---

@@ -2,7 +2,9 @@ import httpx
 import yfinance as yf
 import pandas as pd
 from urllib.parse import quote
-from .config import logger
+import logging
+
+logger = logging.getLogger("stock_service")
 
 ticker_cache = {}
 

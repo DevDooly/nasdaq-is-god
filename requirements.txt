@@ -149,3 +149,5 @@ zope.event==4.4
 zope.hookable==5.1.0
 zope.interface==5.4.0
 pandas
+fastapi
+uvicorn
