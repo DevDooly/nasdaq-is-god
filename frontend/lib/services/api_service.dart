@@ -17,9 +17,9 @@ class ApiService {
   static String get _wsUrl {
     if (kIsWeb) {
       final host = Uri.base.host;
-      return 'ws://$host:9000/ws/prices';
+      return 'ws://$host:9000/ws/updates';
     }
-    return 'ws://localhost:9000/ws/prices';
+    return 'ws://localhost:9000/ws/updates';
   }
 
   final Dio _dio = Dio(BaseOptions(
@@ -74,6 +74,19 @@ class ApiService {
     _backupToken = null;
     if (kIsWeb) { try { html.window.localStorage.remove('jwt_token'); } catch (e) {} }
     try { await _storage.delete(key: 'jwt_token'); } catch (e) {}
+  }
+
+  // 💡 실시간 업데이트 스트림 (인증 포함)
+  Stream getUpdateStream() async* {
+    final token = await getValidToken();
+    if (token == null) return;
+
+    try {
+      final channel = WebSocketChannel.connect(Uri.parse('$_wsUrl?token=$token'));
+      yield* channel.stream.map((event) => jsonDecode(event));
+    } catch (e) {
+      print('WebSocket Error: $e');
+    }
   }
 
   // 💡 API 키 관리
@@ -172,13 +185,6 @@ class ApiService {
   }
 
   // 💡 시세 및 포트폴리오
-  Stream getPriceStream() {
-    try {
-      final channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
-      return channel.stream.map((event) => jsonDecode(event));
-    } catch (e) { return const Stream.empty(); }
-  }
-
   Future<Map<String, dynamic>?> getMe() async {
     try {
       final response = await _dio.get('/users/me');

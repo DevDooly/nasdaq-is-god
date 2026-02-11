@@ -29,7 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSearching = false;
   
   Map<String, double> _livePrices = {};
-  StreamSubscription? _priceSubscription;
+  StreamSubscription? _updateSubscription;
 
   @override
   void initState() {
@@ -40,14 +40,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _priceSubscription?.cancel();
+    _updateSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   void _initWebSocket() {
-    _priceSubscription = _apiService.getPriceStream().listen((event) {
-      if (event != null && event['type'] == 'price_update') {
+    _updateSubscription = _apiService.getUpdateStream().listen((event) {
+      if (event == null) return;
+
+      if (event['type'] == 'price_update') {
         final data = event['data'] as Map<String, dynamic>;
         if (mounted) {
           setState(() {
@@ -56,8 +58,36 @@ class _HomeScreenState extends State<HomeScreen> {
             });
           });
         }
+      } else if (event['type'] == 'notification') {
+        final data = event['data'] as Map<String, dynamic>;
+        _showRealtimeNotification(data['title'], data['body']);
       }
     });
+  }
+
+  void _showRealtimeNotification(String title, String body) {
+    if (!mounted) return;
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            Text(body, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+          ],
+        ),
+        backgroundColor: Colors.blueAccent[700],
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: '닫기',
+          textColor: Colors.white,
+          onPressed: () {},
+        ),
+      ),
+    );
   }
 
   Future<void> _fetchData() async {
