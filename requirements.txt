@@ -7,3 +7,10 @@ pytest
 pytest-asyncio
 fastapi
 uvicorn
+sqlmodel
+asyncpg
+alembic
+pydantic-settings
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
