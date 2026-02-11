@@ -1,9 +1,20 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:html' as html;
 
 class ApiService {
+  static String get _baseUrl {
+    if (kIsWeb) {
+      // 웹 환경에서는 현재 브라우저의 접속 주소(IP/도메인)를 기반으로 8001 포트 연결
+      final host = html.window.location.hostname;
+      return 'http://$host:8001';
+    }
+    return 'http://localhost:8001';
+  }
+
   final Dio _dio = Dio(BaseOptions(
-    baseUrl: 'http://localhost:8001', // Changed to 8001 to avoid conflict
+    baseUrl: _baseUrl,
     connectTimeout: const Duration(seconds: 5),
     receiveTimeout: const Duration(seconds: 3),
   ));
