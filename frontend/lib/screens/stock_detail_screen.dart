@@ -59,33 +59,47 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('${widget.symbol} Analysis')),
-      backgroundColor: const Color(0xFF0F172A),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _fetchInitialData,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildPriceHeader(),
-                    const SizedBox(height: 24),
-                    _buildChartCard('Price History', _buildPriceChart()),
-                    const SizedBox(height: 24),
-                    _buildIndicatorCard('RSI (Relative Strength Index)', _buildRSISection()),
-                    const SizedBox(height: 24),
-                    _buildIndicatorCard('MACD & Bollinger', _buildTechnicalDetails()),
-                    const SizedBox(height: 40),
-                    _buildTradeButtons(),
-                    const SizedBox(height: 40),
-                  ],
+    // 💡 PopScope를 사용하여 브라우저 뒤로가기 버튼 클릭 시 앱 이탈 방지
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.of(context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('${widget.symbol} Analysis'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        backgroundColor: const Color(0xFF0F172A),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                onRefresh: _fetchInitialData,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildPriceHeader(),
+                      const SizedBox(height: 24),
+                      _buildChartCard('Price History', _buildPriceChart()),
+                      const SizedBox(height: 24),
+                      _buildIndicatorCard('RSI (Relative Strength Index)', _buildRSISection()),
+                      const SizedBox(height: 24),
+                      _buildIndicatorCard('MACD & Bollinger', _buildTechnicalDetails()),
+                      const SizedBox(height: 40),
+                      _buildTradeButtons(),
+                      const SizedBox(height: 40),
+                    ],
+                  ),
                 ),
               ),
-            ),
+      ),
     );
   }
 
@@ -185,11 +199,22 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                 onPressed: () async {
                   final qtyString = quantityController.text;
                   final qty = double.tryParse(qtyString) ?? 0;
+                  
                   if (qty <= 0) return;
+
+                  // 💡 매도 시 보유 수량 체크 로직 추가
+                  if (isSell && qty > _heldQuantity) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('❌ Cannot sell more than you own!'),
+                        backgroundColor: Colors.orangeAccent,
+                      ),
+                    );
+                    return;
+                  }
                   
                   Navigator.pop(context);
                   
-                  // 1. 진행 중 알림 표시
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('⏳ Processing $side order for $qty shares...'),
@@ -198,11 +223,9 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                     ),
                   );
 
-                  // 2. API 호출
                   final result = await _apiService.placeOrder(widget.symbol, qty, side);
                   
                   if (mounted) {
-                    // 3. 기존 스낵바 즉시 제거 후 결과 표시
                     ScaffoldMessenger.of(context).clearSnackBars();
                     
                     if (result != null && result['status'] == 'success') {
@@ -214,7 +237,6 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                           duration: const Duration(seconds: 4),
                         ),
                       );
-                      // 4. 데이터 즉시 갱신
                       await _fetchInitialData();
                     } else {
                       final errorMsg = result != null ? result['error'] : 'Unknown error occurred';
