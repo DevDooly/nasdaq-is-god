@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query, Depends, status, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from core.stock_service import get_stock_info, find_ticker
+from core.stock_service import get_stock_info, find_ticker, get_stock_news
 from core.database import init_db, get_session
 from core.models import User, UserCreate, UserRead, Token, TradingStrategy, StrategyCreate, StrategyRead
 from core.auth import get_password_hash, verify_password, create_access_token, decode_access_token
@@ -11,6 +11,7 @@ from core.mock_broker import MockBroker
 from core.kis_broker import KISBroker
 from core.indicator_service import IndicatorService
 from core.strategy_service import StrategyService
+from core.ai_service import AIService
 from core.worker import TradingWorker
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -53,6 +54,7 @@ manager = ConnectionManager()
 USE_REAL_BROKER = os.getenv("USE_REAL_BROKER", "false").lower() == "true"
 broker = KISBroker() if USE_REAL_BROKER else MockBroker()
 indicator_service = IndicatorService()
+ai_service = AIService()
 trade_service = TradeService(broker)
 strategy_service = StrategyService(indicator_service)
 trading_worker = TradingWorker(strategy_service, trade_service)
@@ -61,46 +63,31 @@ async def price_broadcaster():
     """실시간 시세를 주기적으로 브로드캐스팅하는 루프"""
     while True:
         if manager.active_connections:
-            # 현재 관심있는 티커 목록 (임시로 주요 지수 및 일부 종목)
-            # 실제로는 활성화된 전략이나 사용자의 포트폴리오를 기반으로 동적 생성 가능
             tickers = ["TSLA", "AAPL", "NVDA", "QQQ", "^IXIC"]
             updates = {}
-            
             async def get_price(symbol):
                 data = await get_stock_info(symbol)
                 if "error" not in data:
-                    return symbol, {
-                        "price": data["currentPrice"],
-                        "change": data["changePercent"]
-                    }
+                    return symbol, {"price": data["currentPrice"], "change": data["changePercent"]}
                 return symbol, None
-
             results = await asyncio.gather(*[get_price(t) for t in tickers])
             for symbol, val in results:
-                if val:
-                    updates[symbol] = val
-            
-            if updates:
-                await manager.broadcast({"type": "price_update", "data": updates})
-        
-        await asyncio.sleep(10) # 10초마다 갱신
+                if val: updates[symbol] = val
+            if updates: await manager.broadcast({"type": "price_update", "data": updates})
+        await asyncio.sleep(10)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     await init_db()
-    
-    # 워커 및 브로드캐스터 시작
     worker_task = asyncio.create_task(trading_worker.start(interval_seconds=60))
     broadcaster_task = asyncio.create_task(price_broadcaster())
-    
     yield
     trading_worker.stop()
     worker_task.cancel()
     broadcaster_task.cancel()
 
 app = FastAPI(title="Nasdaq is God API", lifespan=lifespan)
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 app.add_middleware(
@@ -111,18 +98,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- WebSocket 엔드포인트 ---
 @app.websocket("/ws/prices")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            # 클라이언트로부터 메시지를 받을 필요는 없지만 연결 유지를 위해 대기
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-
-# --- 기존 API들 ---
 
 async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSession = Depends(get_session)) -> User:
     payload = decode_access_token(token)
@@ -161,9 +144,22 @@ async def search_stock(q: str = Query(..., min_length=1)):
     if not result: raise HTTPException(status_code=404, detail="Not found")
     return result
 
+@app.get("/stock/{symbol}")
+async def get_stock(symbol: str):
+    data = await get_stock_info(symbol)
+    if "error" in data: raise HTTPException(status_code=404, detail=data["error"])
+    return data
+
 @app.get("/stock/{symbol}/indicators")
 async def get_stock_indicators(symbol: str):
     return await indicator_service.get_indicators(symbol)
+
+@app.get("/stock/{symbol}/sentiment")
+async def get_stock_sentiment(symbol: str):
+    """Gemini AI를 사용하여 해당 종목의 뉴스 기반 투자 심리를 분석합니다."""
+    news = await get_stock_news(symbol)
+    sentiment = await ai_service.analyze_sentiment(symbol, news)
+    return sentiment
 
 @app.post("/trade/order")
 async def place_trade_order(symbol: str, quantity: float, side: str, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -172,20 +168,8 @@ async def place_trade_order(symbol: str, quantity: float, side: str, current_use
     return result
 
 @app.get("/portfolio")
-
-async def get_portfolio(
-
-    current_user: User = Depends(get_current_user), 
-
-    session: AsyncSession = Depends(get_session)
-
-):
-
-    """사용자의 전체 포트폴리오 요약 및 자산 목록을 조회합니다."""
-
+async def get_portfolio(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     return await trade_service.get_user_portfolio(session, current_user)
-
-
 
 @app.get("/trade/history")
 async def get_trade_history(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -227,7 +211,7 @@ async def delete_strategy(strategy_id: int, current_user: User = Depends(get_cur
 
 @app.get("/")
 async def root():
-    return {"message": "Nasdaq is God API - WebSocket Enabled"}
+    return {"message": "Nasdaq is God API - AI Enabled"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=9000)

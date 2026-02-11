@@ -69,12 +69,9 @@ async def get_stock_info(ticker_symbol: str) -> dict:
     logger.info(f"🌐 [API Fetch] Fetching real-time price for {ticker_symbol}")
     ticker = yf.Ticker(ticker_symbol)
     try:
-        # yfinance의 info 호출은 매우 느리므로 최소한의 데이터만 가져오도록 최적화 시도
-        # (최신 종가 데이터를 가져오는 것이 info보다 빠름)
         hist = ticker.history(period="2d")
         
         if hist.empty:
-            # history 실패 시 info로 폴백
             info = ticker.info
             current_price = info.get('currentPrice') or info.get('regularMarketPrice')
             previous_close = info.get('previousClose')
@@ -84,7 +81,7 @@ async def get_stock_info(ticker_symbol: str) -> dict:
             current_price = hist['Close'].iloc[-1]
             previous_close = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
             short_name = ticker_symbol
-            currency = "USD" # 기본값
+            currency = "USD" 
 
         change = current_price - previous_close
         change_percent = (change / previous_close) * 100 if previous_close != 0 else 0
@@ -105,3 +102,13 @@ async def get_stock_info(ticker_symbol: str) -> dict:
     except Exception as e:
         logger.error(f"Error fetching data for {ticker_symbol}: {e}")
         return {"error": f"Failed to fetch data for {ticker_symbol}"}
+
+async def get_stock_news(ticker_symbol: str) -> list:
+    """yfinance를 사용하여 특정 종목의 최신 뉴스 리스트를 가져옵니다."""
+    ticker = yf.Ticker(ticker_symbol)
+    try:
+        news = ticker.news
+        return news[:5]  # 최신 뉴스 5개만 반환
+    except Exception as e:
+        logger.error(f"Error fetching news for {ticker_symbol}: {e}")
+        return []
