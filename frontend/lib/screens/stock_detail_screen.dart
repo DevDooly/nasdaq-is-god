@@ -54,9 +54,96 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                   _buildIndicatorCard('RSI (Relative Strength Index)', _buildRSISection()),
                   const SizedBox(height: 24),
                   _buildIndicatorCard('MACD & Bollinger', _buildTechnicalDetails()),
+                  const SizedBox(height: 40),
+                  _buildTradeButtons(),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildTradeButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () => _showOrderDialog('BUY'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.greenAccent[700],
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('BUY', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () => _showOrderDialog('SELL'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent[700],
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('SELL', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showOrderDialog(String side) {
+    final quantityController = TextEditingController(text: '1');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: Text('$side ${widget.symbol}', style: const TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: quantityController,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Quantity',
+                labelStyle: TextStyle(color: Colors.grey),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final qty = double.tryParse(quantityController.text) ?? 0;
+              if (qty <= 0) return;
+              
+              Navigator.pop(context);
+              final result = await _apiService.placeOrder(widget.symbol, qty, side);
+              
+              if (mounted) {
+                if (result != null && result['status'] == 'success') {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${widget.symbol} $side Order Success!')),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Order failed. Please try again.')),
+                  );
+                }
+              }
+            },
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
     );
   }
 

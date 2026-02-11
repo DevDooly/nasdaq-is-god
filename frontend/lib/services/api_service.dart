@@ -95,13 +95,76 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>?> getIndicators(String symbol) async {
-    try {
-      final response = await _dio.get('/stock/$symbol/indicators');
-      dynamic data = response.data;
-      return data is String ? jsonDecode(data) : data;
-    } catch (e) {
-      return null;
+    Future<Map<String, dynamic>?> getIndicators(String symbol) async {
+
+      try {
+
+        final response = await _dio.get('/stock/$symbol/indicators');
+
+        dynamic data = response.data;
+
+        return data is String ? jsonDecode(data) : data;
+
+      } catch (e) {
+
+        return null;
+
+      }
+
     }
+
+  
+
+    // 종목 검색
+
+    Future<Map<String, dynamic>?> searchStock(String query) async {
+
+      try {
+
+        final response = await _dio.get('/search', queryParameters: {'q': query});
+
+        dynamic data = response.data;
+
+        return data is String ? jsonDecode(data) : data;
+
+      } catch (e) {
+
+        return null;
+
+      }
+
+    }
+
+  
+
+    // 주식 주문 (매수/매도)
+
+    Future<Map<String, dynamic>?> placeOrder(String symbol, double quantity, String side) async {
+
+      try {
+
+        final response = await _dio.post('/trade/order', queryParameters: {
+
+          'symbol': symbol,
+
+          'quantity': quantity,
+
+          'side': side,
+
+        });
+
+        dynamic data = response.data;
+
+        return data is String ? jsonDecode(data) : data;
+
+      } catch (e) {
+
+        return null;
+
+      }
+
+    }
+
   }
-}
+
+  

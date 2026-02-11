@@ -13,9 +13,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
+  final _searchController = TextEditingController();
   Map<String, dynamic>? _userInfo;
   List<StockAsset>? _portfolio;
   bool _isLoading = true;
+  bool _isSearching = false;
 
   @override
   void initState() {
@@ -37,11 +39,36 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _handleSearch() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+
+    setState(() => _isSearching = true);
+    final result = await _apiService.searchStock(query);
+    setState(() => _isSearching = false);
+
+    if (result != null && result['symbol'] != null) {
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => StockDetailScreen(symbol: result['symbol']),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('종목을 찾을 수 없습니다.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Nasdaq is God - Dashboard'),
+        title: const Text('Nasdaq is God'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -49,6 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+      backgroundColor: const Color(0xFF0F172A),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -60,12 +88,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildHeader(),
+                    const SizedBox(height: 20),
+                    _buildSearchBar(),
                     const SizedBox(height: 24),
                     _buildPortfolioSummary(),
                     const SizedBox(height: 24),
                     const Text(
-                      'Holdings',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      'My Portfolio',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                     const SizedBox(height: 12),
                     _buildAssetList(),
@@ -86,9 +116,37 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         Text(
           _userInfo?['username'] ?? 'User',
-          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
         ),
       ],
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: TextField(
+        controller: _searchController,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: 'Search Ticker (e.g. TSLA, AAPL)',
+          hintStyle: const TextStyle(color: Colors.grey),
+          prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
+          suffixIcon: _isSearching 
+            ? const SizedBox(width: 20, height: 20, child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)))
+            : IconButton(
+                icon: const Icon(Icons.arrow_forward, color: Colors.blueAccent),
+                onPressed: _handleSearch,
+              ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+        onSubmitted: (_) => _handleSearch(),
+      ),
     );
   }
 
@@ -110,6 +168,13 @@ class _HomeScreenState extends State<HomeScreen> {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -134,10 +199,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildAssetList() {
     if (_portfolio == null || _portfolio!.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 40),
-          child: Text('No assets found. Start trading!'),
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.02),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Column(
+          children: [
+            Icon(Icons.pie_chart_outline, size: 48, color: Colors.grey),
+            SizedBox(height: 12),
+            Text('No assets found. Search and buy stocks!', style: TextStyle(color: Colors.grey)),
+          ],
         ),
       );
     }
@@ -146,23 +220,23 @@ class _HomeScreenState extends State<HomeScreen> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: _portfolio!.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
+      separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 1),
       itemBuilder: (context, index) {
         final asset = _portfolio![index];
         return ListTile(
-          contentPadding: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.symmetric(vertical: 4),
           title: Text(
             asset.symbol,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
           ),
-          subtitle: Text('${asset.quantity} shares'),
+          subtitle: Text('${asset.quantity} shares', style: const TextStyle(color: Colors.grey)),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
                 '\$${NumberFormat('#,##0.00').format(asset.averagePrice)}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
               ),
               const Text(
                 'Avg. Price',
