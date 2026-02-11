@@ -3,18 +3,22 @@ import yfinance as yf
 import pandas as pd
 from urllib.parse import quote
 import logging
+import time
 
 logger = logging.getLogger("stock_service")
 
+# 캐시 저장소
 ticker_cache = {}
+price_cache = {}
+CACHE_EXPIRE_SECONDS = 60  # 시세 데이터 캐시 유지 시간 (1분)
 
 async def find_ticker(query: str) -> dict | None:
     """입력된 쿼리(종목명 또는 티커)로 가장 적합한 티커 심볼을 찾습니다."""
     if query in ticker_cache:
-        logger.info(f"Found ticker in cache for query: {query}")
+        logger.info(f"Found ticker in cache: {query}")
         return ticker_cache[query]
 
-    logger.info(f"Searching ticker for query: {query}")
+    logger.info(f"Searching ticker for: {query}")
     encoded_query = quote(query)
     url = f"https://query1.finance.yahoo.com/v1/finance/search?q={encoded_query}"
     
@@ -44,7 +48,6 @@ async def find_ticker(query: str) -> dict | None:
         
         result = {"symbol": symbol, "name": long_name}
         ticker_cache[query] = result
-        logger.info(f"Found ticker: {symbol} for query: {query}")
         return result
 
     except Exception as e:
@@ -52,49 +55,53 @@ async def find_ticker(query: str) -> dict | None:
         return None
 
 async def get_stock_info(ticker_symbol: str) -> dict:
-    """yfinance를 사용하여 특정 티커 심볼의 현재 주식 정보를 가져옵니다."""
+    """yfinance를 사용하여 주식 정보를 가져오며, 1분간 캐싱을 적용합니다."""
+    
+    # 1. 캐시 확인
+    now = time.time()
+    if ticker_symbol in price_cache:
+        cached_data, timestamp = price_cache[ticker_symbol]
+        if now - timestamp < CACHE_EXPIRE_SECONDS:
+            logger.info(f"💡 [Cache Hit] Returning cached price for {ticker_symbol}")
+            return cached_data
+
+    # 2. 캐시 없거나 만료된 경우 실제 조회
+    logger.info(f"🌐 [API Fetch] Fetching real-time price for {ticker_symbol}")
     ticker = yf.Ticker(ticker_symbol)
     try:
-        info = ticker.info
+        # yfinance의 info 호출은 매우 느리므로 최소한의 데이터만 가져오도록 최적화 시도
+        # (최신 종가 데이터를 가져오는 것이 info보다 빠름)
+        hist = ticker.history(period="2d")
         
-        hist = ticker.history(period="5d")
-        
-        current_price = None
-        if not hist.empty:
-            current_price = hist['Close'].iloc[-1]
-        
-        if current_price is None:
+        if hist.empty:
+            # history 실패 시 info로 폴백
+            info = ticker.info
             current_price = info.get('currentPrice') or info.get('regularMarketPrice')
+            previous_close = info.get('previousClose')
+            short_name = info.get('shortName', ticker_symbol)
+            currency = info.get('currency', 'USD')
+        else:
+            current_price = hist['Close'].iloc[-1]
+            previous_close = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
+            short_name = ticker_symbol
+            currency = "USD" # 기본값
 
-        previous_close = info.get('previousClose')
-        if previous_close is None and len(hist) > 1:
-            previous_close = hist['Close'].iloc[-2]
-            
-        open_price = info.get('open')
-        day_high = info.get('dayHigh')
-        day_low = info.get('dayLow')
-        volume = info.get('volume')
-        short_name = info.get('shortName', ticker_symbol)
+        change = current_price - previous_close
+        change_percent = (change / previous_close) * 100 if previous_close != 0 else 0
 
-        change = None
-        change_percent = None
-        if current_price and previous_close:
-            change = current_price - previous_close
-            if previous_close != 0:
-                change_percent = (change / previous_close) * 100
-
-        return {
+        result = {
             "shortName": short_name,
-            "currentPrice": current_price,
-            "previousClose": previous_close,
-            "open": open_price,
-            "dayHigh": day_high,
-            "dayLow": day_low,
-            "volume": volume,
-            "change": change,
-            "changePercent": change_percent,
-            "currency": info.get('currency')
+            "currentPrice": float(current_price),
+            "previousClose": float(previous_close),
+            "change": float(change),
+            "changePercent": float(change_percent),
+            "currency": currency
         }
+
+        # 3. 결과 캐싱
+        price_cache[ticker_symbol] = (result, now)
+        return result
+
     except Exception as e:
         logger.error(f"Error fetching data for {ticker_symbol}: {e}")
-        return {"error": f"'{ticker_symbol}'에 대한 정보를 가져오는 데 실패했습니다. 티커 심볼을 확인해주세요."}
+        return {"error": f"Failed to fetch data for {ticker_symbol}"}

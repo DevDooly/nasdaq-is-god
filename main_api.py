@@ -148,6 +148,14 @@ async def get_portfolio(
 ):
     return await trade_service.get_user_portfolio(session, current_user)
 
+@app.get("/trade/history")
+async def get_trade_history(
+    current_user: User = Depends(get_current_user), 
+    session: AsyncSession = Depends(get_session)
+):
+    """사용자의 전체 매매 내역을 조회합니다."""
+    return await trade_service.get_trade_history(session, current_user)
+
 @app.get("/")
 async def root():
     return {"message": "Nasdaq is God API is running on Port 9000"}

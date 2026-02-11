@@ -21,5 +21,6 @@
 - 새로운 기능 추가 시 `tests/` 폴더 내에 유닛 테스트를 반드시 포함한다.
 
 ### 5. Git 및 배포
+- **Integrity Check**: 모든 코드 수정 완료 및 커밋 전에는 반드시 `./scripts/check_system.sh`를 실행하여 시스템의 무결성을 점검한다.
 - `main` 브랜치는 항상 배포 가능한 상태를 유지한다.
 - Docker 환경에서 동작 가능하도록 의존성(`requirements.txt`)을 엄격히 관리한다.

@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Nasdaq is God - Frontend Web Runner (Static Server)
-# This script serves the built Flutter web files on port 8080.
+# Nasdaq is God - Frontend Web Runner (Optimized)
+# This script serves the built Flutter web files using a multi-threaded server.
 
 PORT=8080
-echo "🚀 Preparing Nasdaq is God Frontend (Static Web Server)..."
+echo "🚀 Preparing Nasdaq is God Frontend (Optimized Server)..."
 
 # 1. 8080 포트 정리
 PID=$(lsof -t -i:$PORT 2>/dev/null || netstat -tulpn 2>/dev/null | grep ":$PORT " | awk '{print $7}' | cut -d/ -f1)
@@ -25,19 +25,15 @@ if [ "$PARENT_DIR" != "frontend" ]; then
     fi
 fi
 
-# 3. 빌드 파일 존재 확인 및 빌드 (필요시)
+# 3. 빌드 파일 존재 확인
 if [ ! -d "build/web" ]; then
     echo "📦 Build folder missing. Running flutter build web..."
-    ~/flutter/bin/flutter build web --release
+    ~/flutter/bin/flutter build web --release --web-renderer html
 fi
 
-# 4. Python으로 정적 웹 서버 실행
-echo "🌐 Serving static web files on port $PORT..."
-echo "👉 Access at: http://YOUR_SERVER_IP:$PORT"
-
-# build/web 폴더로 이동하여 서버 시작
-cd build/web
-# nohup을 사용하여 백그라운드에서 실행 (선택 사항이나 권장)
-nohup python3 -m http.server $PORT > ../../web_server.log 2>&1 &
+# 4. 최적화된 Python 서버 실행 (Threading 지원)
+echo "🌐 Starting Threaded Web Server on port $PORT..."
+nohup python3 serve_web.py > web_server.log 2>&1 &
 
 echo "✅ Web server started in background. Logs available at frontend/web_server.log"
+echo "👉 Access at: http://devdooly.iptime.org:$PORT"
