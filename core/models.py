@@ -1,6 +1,7 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from sqlmodel import SQLModel, Field, Relationship
+import json
 
 class UserBase(SQLModel):
     username: str = Field(index=True, unique=True)
@@ -27,7 +28,6 @@ class Token(SQLModel):
     token_type: str
 
 class StockAsset(SQLModel, table=True):
-    # ... existing code remains similar but ensuring User connection is consistent
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id")
     symbol: str = Field(index=True)
@@ -49,15 +49,25 @@ class TradeLog(SQLModel, table=True):
     
     user: User = Relationship(back_populates="trades")
 
-class TradingStrategy(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id")
+class TradingStrategyBase(SQLModel):
     name: str
     symbol: str
     is_active: bool = Field(default=False)
-    strategy_type: str
-    parameters: str
+    strategy_type: str  # e.g., RSI_LIMIT
+    parameters: str = Field(default="{}") # JSON string for params like {"buy_rsi": 30, "sell_rsi": 70}
+
+class TradingStrategy(TradingStrategyBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     user: User = Relationship(back_populates="strategies")
+
+class StrategyCreate(TradingStrategyBase):
+    pass
+
+class StrategyRead(TradingStrategyBase):
+    id: int
+    user_id: int
+    created_at: datetime
