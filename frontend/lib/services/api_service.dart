@@ -112,6 +112,16 @@ class ApiService {
     }
   }
 
+  // 💡 AI 감성 분석 조회
+  Future<Map<String, dynamic>?> getStockSentiment(String symbol) async {
+    try {
+      final response = await _dio.get('/stock/$symbol/sentiment');
+      return response.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> searchStock(String query) async {
     try {
       final response = await _dio.get('/search', queryParameters: {'q': query});

@@ -58,15 +58,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
     final user = await _apiService.getMe();
-    final portfolioData = await _apiService.getPortfolio();
+    final dynamic portfolioRaw = await _apiService.getPortfolio();
     
     if (mounted) {
       setState(() {
         _userInfo = user;
-        if (portfolioData != null) {
-          final assetsList = portfolioData['assets'] as List;
+        if (portfolioRaw != null && portfolioRaw is Map<String, dynamic>) {
+          final assetsList = portfolioRaw['assets'] as List;
           _portfolio = assetsList.map((item) => StockAsset.fromJson(item)).toList();
-          _summary = portfolioData['summary'];
+          _summary = portfolioRaw['summary'] as Map<String, dynamic>?;
         }
         _isLoading = false;
       });
@@ -87,7 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
           MaterialPageRoute(
             builder: (context) => StockDetailScreen(symbol: result['symbol']),
           ),
-        ).then((_) => _fetchData()); // 💡 상세페이지 갔다오면 데이터 갱신
+        ).then((_) => _fetchData());
       }
     } else {
       if (mounted) {
@@ -184,7 +184,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildPortfolioSummary() {
     if (_summary == null) return const SizedBox();
 
-    // 💡 실시간 반영을 위해 갱신 루프가 필요할 수 있으나, 현재는 _fetchData 시점 기준
     double totalEquity = (_summary!['total_equity'] ?? 0).toDouble();
     double totalProfit = (_summary!['total_profit'] ?? 0).toDouble();
     double profitRate = (_summary!['total_profit_rate'] ?? 0).toDouble();
