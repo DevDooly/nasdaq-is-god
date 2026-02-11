@@ -29,7 +29,6 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   Future<void> _fetchInitialData() async {
     setState(() => _isLoading = true);
     
-    // 지표 데이터와 포트폴리오 데이터를 병렬로 가져옴
     final results = await Future.wait([
       _apiService.getIndicators(widget.symbol),
       _apiService.getPortfolio(),
@@ -65,22 +64,26 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
       backgroundColor: const Color(0xFF0F172A),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildPriceHeader(),
-                  const SizedBox(height: 24),
-                  _buildChartCard('Price History', _buildPriceChart()),
-                  const SizedBox(height: 24),
-                  _buildIndicatorCard('RSI (Relative Strength Index)', _buildRSISection()),
-                  const SizedBox(height: 24),
-                  _buildIndicatorCard('MACD & Bollinger', _buildTechnicalDetails()),
-                  const SizedBox(height: 40),
-                  _buildTradeButtons(),
-                  const SizedBox(height: 40),
-                ],
+          : RefreshIndicator(
+              onRefresh: _fetchInitialData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildPriceHeader(),
+                    const SizedBox(height: 24),
+                    _buildChartCard('Price History', _buildPriceChart()),
+                    const SizedBox(height: 24),
+                    _buildIndicatorCard('RSI (Relative Strength Index)', _buildRSISection()),
+                    const SizedBox(height: 24),
+                    _buildIndicatorCard('MACD & Bollinger', _buildTechnicalDetails()),
+                    const SizedBox(height: 40),
+                    _buildTradeButtons(),
+                    const SizedBox(height: 40),
+                  ],
+                ),
               ),
             ),
     );
@@ -122,7 +125,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder( // 다이얼로그 내 상태 변경을 위해 사용
+      builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
             backgroundColor: const Color(0xFF1E293B),
@@ -157,7 +160,6 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                       return InkWell(
                         onTap: () {
                           final calculated = (_heldQuantity * (pct / 100));
-                          // 소수점 2자리까지 표시 (필요 시 조정)
                           quantityController.text = calculated.toStringAsFixed(2);
                         },
                         child: Container(
@@ -181,34 +183,46 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  final qty = double.tryParse(quantityController.text) ?? 0;
+                  final qtyString = quantityController.text;
+                  final qty = double.tryParse(qtyString) ?? 0;
                   if (qty <= 0) return;
                   
                   Navigator.pop(context);
                   
+                  // 1. 진행 중 알림 표시
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Processing order...'), duration: Duration(seconds: 1)),
+                    SnackBar(
+                      content: Text('⏳ Processing $side order for $qty shares...'),
+                      backgroundColor: Colors.blueGrey,
+                      duration: const Duration(seconds: 1),
+                    ),
                   );
 
+                  // 2. API 호출
                   final result = await _apiService.placeOrder(widget.symbol, qty, side);
                   
                   if (mounted) {
+                    // 3. 기존 스낵바 즉시 제거 후 결과 표시
+                    ScaffoldMessenger.of(context).clearSnackBars();
+                    
                     if (result != null && result['status'] == 'success') {
-                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('🎉 ${widget.symbol} $side Order Successful!'),
-                          backgroundColor: Colors.green[600],
+                          content: Text('🎉 ${widget.symbol} $side order successful! ($qty shares)'),
+                          backgroundColor: Colors.green[700],
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 4),
                         ),
                       );
-                      // 주문 성공 후 보유 수량 갱신
-                      _fetchInitialData();
+                      // 4. 데이터 즉시 갱신
+                      await _fetchInitialData();
                     } else {
-                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      final errorMsg = result != null ? result['error'] : 'Unknown error occurred';
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('❌ Order failed. Please try again.'),
+                        SnackBar(
+                          content: Text('❌ $side order failed: $errorMsg'),
                           backgroundColor: Colors.redAccent,
+                          behavior: SnackBarBehavior.floating,
                         ),
                       );
                     }
@@ -279,6 +293,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
             isCurved: true,
             color: Colors.blueAccent,
             barWidth: 3,
+            isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
