@@ -1,16 +1,17 @@
 # 📋 Nasdaq is God 작업 리스트
 
-## 🚀 High Priority (프론트엔드 시각화 및 자동매매)
-- [ ] **대시보드 UI 구현**: 앱에서 실시간 잔고, 보유 자산, 총 수익률 표시
+## 🚀 High Priority (지표 시각화 및 매매 UI)
 - [ ] **지표 차트 시각화**: `fl_chart`를 이용하여 RSI, MACD 등을 앱에서 그래프로 표시
+- [ ] **매매 폼 개발**: 앱에서 티커 검색 및 수량 입력 후 주문 실행 UI 연동
 - [ ] **자동매매 스케줄러**: 정해진 주기에 따라 지표를 체크하고 `KISBroker`를 통해 자동 주문 실행
 - [ ] **실시간 데이터 스트리밍**: WebSocket을 통한 실시간 시세 및 체결 알림
 
-## ✅ Completed (실전 매매 및 백엔드 엔진)
+## ✅ Completed (핵심 백엔드 & UI 기초)
+- [x] **대시보드 UI 구현**: 앱에서 실시간 잔고, 보유 자산, 총 수익률 표시 완료
+- [x] **Flutter 프로젝트 초기화**: `frontend/` 디렉토리 생성 및 핵심 아키텍처 구성 완료
 - [x] **실제 브로커 연동**: 한국투자증권(KIS) API 연동 (`core/kis_broker.py`) 완료
 - [x] **브로커 스위칭**: Mock <-> Real 브로커 간 전환 기능 추가
 - [x] **기술적 지표 모듈**: `core/indicator_service.py` (RSI, MACD, BB) 완료
-- [x] **분석 API 추가**: `/stock/{symbol}/indicators` 엔드포인트 완료
 - [x] **인증 및 DB 구축**: JWT 로그인 시스템 및 PostgreSQL 연동 완료
 
 ## 📈 Analysis & Strategy
