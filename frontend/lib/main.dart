@@ -18,7 +18,7 @@ class NasdaqGodApp extends StatelessWidget {
         brightness: Brightness.dark,
         primarySwatch: Colors.blue,
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF0F172A), // Slate 900
+        scaffoldBackgroundColor: const Color(0xFF0F172A),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xFF0F172A),
           elevation: 0,
@@ -40,27 +40,40 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _apiService = ApiService();
+  final _passwordFocusNode = FocusNode();
   bool _isLoading = false;
 
-  void _handleLogin() async {
-    setState(() => _isLoading = true);
-    final result = await _apiService.login(
-      _usernameController.text,
-      _passwordController.text,
-    );
-    setState(() => _isLoading = false);
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    _passwordFocusNode.dispose();
+    super.dispose();
+  }
 
-    if (result != null && mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-      );
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('로그인 실패. 아이디와 비밀번호를 확인해주세요.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+  void _handleLogin() async {
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (username.isEmpty || password.isEmpty) return;
+
+    setState(() => _isLoading = true);
+    final result = await _apiService.login(username, password);
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (result != null) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('로그인 실패. 아이디와 비밀번호를 확인해주세요.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -84,6 +97,8 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 48),
               TextField(
                 controller: _usernameController,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocusNode),
                 decoration: InputDecoration(
                   labelText: 'Username',
                   filled: true,
@@ -94,6 +109,9 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _passwordController,
+                focusNode: _passwordFocusNode,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _handleLogin(), // 💡 엔터키 클릭 시 로그인 실행
                 decoration: InputDecoration(
                   labelText: 'Password',
                   filled: true,
@@ -112,7 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: _isLoading
                     ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Login', style: TextStyle(fontSize: 18, color: Colors.white)),
+                    : const Text('Login', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ],
           ),

@@ -94,31 +94,45 @@ class TradeService:
         }
 
     async def get_user_portfolio(self, session: AsyncSession, user: User):
-        """사용자의 전체 포트폴리오 조회 (현재가 포함)"""
+        """사용자의 전체 포트폴리오 조회 (최적화 버전)"""
         statement = select(StockAsset).where(StockAsset.user_id == user.id)
         result = await session.execute(statement)
         assets = result.scalars().all()
         
-        # 각 자산의 현재가를 병렬로 조회
-        async def enrich_asset(asset):
-            stock_data = await get_stock_info(asset.symbol)
-            current_price = stock_data.get("currentPrice", asset.average_price)
-            
-            # DB 모델을 딕셔너리로 변환하고 현재가 추가
-            asset_dict = asset.dict()
-            asset_dict["current_price"] = current_price
-            # 수익률 계산
-            profit = (current_price - asset.average_price) * asset.quantity
-            profit_rate = ((current_price / asset.average_price) - 1) * 100 if asset.average_price > 0 else 0
-            asset_dict["profit"] = profit
-            asset_dict["profit_rate"] = profit_rate
-            return asset_dict
+        if not assets:
+            return []
 
+        # 💡 각 자산의 현재가를 병렬로 빠르게 조회
+        async def enrich_asset(asset):
+            try:
+                # 타임아웃을 적용하여 전체 조회가 무한정 대기하지 않도록 보호
+                stock_data = await asyncio.wait_for(get_stock_info(asset.symbol), timeout=5.0)
+                current_price = stock_data.get("currentPrice", asset.average_price)
+                
+                asset_dict = asset.dict()
+                asset_dict["current_price"] = current_price
+                
+                # 수익률 계산
+                profit = (current_price - asset.average_price) * asset.quantity
+                profit_rate = ((current_price / asset.average_price) - 1) * 100 if asset.average_price > 0 else 0
+                asset_dict["profit"] = profit
+                asset_dict["profit_rate"] = profit_rate
+                return asset_dict
+            except Exception as e:
+                logger.warning(f"Failed to enrich asset {asset.symbol}: {e}")
+                # 실패 시 기본 정보라도 반환
+                asset_dict = asset.dict()
+                asset_dict["current_price"] = asset.average_price
+                asset_dict["profit"] = 0.0
+                asset_dict["profit_rate"] = 0.0
+                return asset_dict
+
+        # 병렬 실행으로 전체 응답 속도 대폭 개선
         enriched_assets = await asyncio.gather(*[enrich_asset(a) for a in assets])
         return enriched_assets
 
     async def get_trade_history(self, session: AsyncSession, user: User):
-        """사용자의 전체 매매 내역 조회"""
+        """사용자의 전체 매매 내역 조회 (페이징 없이 최신순)"""
         statement = select(TradeLog).where(TradeLog.user_id == user.id).order_by(TradeLog.executed_at.desc())
         result = await session.execute(statement)
         logs = result.scalars().all()
