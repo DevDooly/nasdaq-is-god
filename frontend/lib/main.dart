@@ -40,6 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _apiService = ApiService();
+  final _usernameFocusNode = FocusNode();
   final _passwordFocusNode = FocusNode();
   bool _isLoading = false;
 
@@ -47,6 +48,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _usernameFocusNode.dispose();
     _passwordFocusNode.dispose();
     super.dispose();
   }
@@ -55,7 +57,12 @@ class _LoginScreenState extends State<LoginScreen> {
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (username.isEmpty || password.isEmpty) return;
+    if (username.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('아이디와 비밀번호를 입력해주세요.')),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
     final result = await _apiService.login(username, password);
@@ -97,8 +104,13 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 48),
               TextField(
                 controller: _usernameController,
+                focusNode: _usernameFocusNode,
                 textInputAction: TextInputAction.next,
-                onSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocusNode),
+                autofocus: true,
+                onSubmitted: (_) {
+                  // 💡 Username 입력 후 엔터 시 Password로 이동
+                  FocusScope.of(context).requestFocus(_passwordFocusNode);
+                },
                 decoration: InputDecoration(
                   labelText: 'Username',
                   filled: true,
@@ -110,8 +122,11 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _passwordController,
                 focusNode: _passwordFocusNode,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _handleLogin(), // 💡 엔터키 클릭 시 로그인 실행
+                textInputAction: TextInputAction.go, // 💡 "Go" 아이콘으로 표시
+                onSubmitted: (_) {
+                  // 💡 Password 입력 후 엔터 시 바로 로그인 실행
+                  _handleLogin();
+                },
                 decoration: InputDecoration(
                   labelText: 'Password',
                   filled: true,
