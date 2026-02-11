@@ -133,16 +133,39 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>?> getStockSentiment(String symbol) async {
-    try {
-      final response = await _dio.get('/stock/$symbol/sentiment');
-      return response.data;
-    } catch (e) {
-      return null;
-    }
-  }
+    Future<Map<String, dynamic>?> getStockSentiment(String symbol) async {
 
-  Future<Map<String, dynamic>?> searchStock(String query) async {
+      try {
+
+        final response = await _dio.get('/stock/$symbol/sentiment');
+
+        return response.data;
+
+      } catch (e) { return null; }
+
+    }
+
+  
+
+    // 💡 시장 전체 심리 분석
+
+    Future<Map<String, dynamic>?> getMarketSentiment() async {
+
+      try {
+
+        final response = await _dio.get('/market/sentiment');
+
+        return response.data;
+
+      } catch (e) { return null; }
+
+    }
+
+  
+
+    Future<Map<String, dynamic>?> searchStock(String query) async {
+
+  
     try {
       final response = await _dio.get('/search', queryParameters: {'q': query});
       return response.data;

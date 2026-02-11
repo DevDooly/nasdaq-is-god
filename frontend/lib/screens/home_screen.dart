@@ -23,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<StockAsset>? _portfolio;
   Map<String, dynamic>? _summary;
   List<dynamic>? _equityHistory;
+  Map<String, dynamic>? _marketSentiment;
   bool _isLoading = true;
   bool _isSearching = false;
   
@@ -64,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _apiService.getMe(),
       _apiService.getPortfolio(),
       _apiService.getPortfolioHistory(),
+      _apiService.getMarketSentiment(), // 💡 시장 분석 데이터 추가
     ]);
     
     if (mounted) {
@@ -76,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _summary = portfolioRaw['summary'] as Map<String, dynamic>?;
         }
         _equityHistory = results[2] as List<dynamic>?;
+        _marketSentiment = results[3] as Map<String, dynamic>?;
         _isLoading = false;
       });
     }
@@ -89,6 +92,8 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isSearching = false);
     if (result != null && result['symbol'] != null && mounted) {
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: result['symbol']))).then((_) => _fetchData());
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('종목을 찾을 수 없습니다.')));
     }
   }
 
@@ -117,6 +122,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     _buildHeader(),
                     const SizedBox(height: 20),
+                    if (_marketSentiment != null && _marketSentiment!['error'] == null) ...[
+                      _buildMarketSentimentCard(),
+                      const SizedBox(height: 20),
+                    ],
                     _buildSearchBar(),
                     const SizedBox(height: 24),
                     _buildPortfolioSummary(),
@@ -134,6 +143,66 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  // 💡 AI 시장 분석 카드
+  Widget _buildMarketSentimentCard() {
+    final score = _marketSentiment!['score'];
+    final sentiment = _marketSentiment!['sentiment'];
+    final summary = _marketSentiment!['summary'];
+    final keywords = List<String>.from(_marketSentiment!['keywords'] ?? []);
+
+    Color cardColor;
+    if (score >= 60) cardColor = Colors.green[900]!;
+    else if (score <= 40) cardColor = Colors.red[900]!;
+    else cardColor = Colors.blueGrey[800]!;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [cardColor.withOpacity(0.8), cardColor.withOpacity(0.4)]),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.psychology, color: Colors.white, size: 24),
+                  SizedBox(width: 8),
+                  Text('AI Market Briefing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)),
+                child: Text('$sentiment ($score/100)', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              )
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(summary, style: const TextStyle(color: Colors.white, fontSize: 14)),
+          if (keywords.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              children: keywords.map((k) => Chip(
+                label: Text('#$k', style: const TextStyle(fontSize: 11, color: Colors.white)),
+                backgroundColor: Colors.black26,
+                padding: EdgeInsets.zero,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                visualDensity: VisualDensity.compact,
+              )).toList(),
+            )
+          ]
+        ],
+      ),
     );
   }
 
