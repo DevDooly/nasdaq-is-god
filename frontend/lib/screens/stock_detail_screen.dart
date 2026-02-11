@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../services/api_service.dart';
 import '../models/indicator.dart';
+import '../models/asset.dart';
 import 'package:intl/intl.dart';
 
 class StockDetailScreen extends StatefulWidget {
@@ -16,20 +17,42 @@ class StockDetailScreen extends StatefulWidget {
 class _StockDetailScreenState extends State<StockDetailScreen> {
   final ApiService _apiService = ApiService();
   IndicatorData? _data;
+  double _heldQuantity = 0;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchIndicators();
+    _fetchInitialData();
   }
 
-  Future<void> _fetchIndicators() async {
+  Future<void> _fetchInitialData() async {
     setState(() => _isLoading = true);
-    final json = await _apiService.getIndicators(widget.symbol);
-    if (json != null && mounted) {
+    
+    // 지표 데이터와 포트폴리오 데이터를 병렬로 가져옴
+    final results = await Future.wait([
+      _apiService.getIndicators(widget.symbol),
+      _apiService.getPortfolio(),
+    ]);
+
+    final indicatorJson = results[0] as Map<String, dynamic>?;
+    final portfolioJson = results[1] as List<dynamic>?;
+
+    if (mounted) {
       setState(() {
-        _data = IndicatorData.fromJson(json);
+        if (indicatorJson != null) {
+          _data = IndicatorData.fromJson(indicatorJson);
+        }
+        
+        if (portfolioJson != null) {
+          final assets = portfolioJson.map((item) => StockAsset.fromJson(item)).toList();
+          final currentAsset = assets.cast<StockAsset?>().firstWhere(
+            (a) => a?.symbol == widget.symbol, 
+            orElse: () => null
+          );
+          _heldQuantity = currentAsset?.quantity ?? 0;
+        }
+        
         _isLoading = false;
       });
     }
@@ -95,77 +118,113 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
 
   void _showOrderDialog(String side) {
     final quantityController = TextEditingController(text: '1');
+    final isSell = side.toUpperCase() == 'SELL';
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: Text('$side ${widget.symbol}', style: const TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: quantityController,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Quantity',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-              ),
+      builder: (context) => StatefulBuilder( // 다이얼로그 내 상태 변경을 위해 사용
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text('$side ${widget.symbol}', style: const TextStyle(color: Colors.white)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isSell) ...[
+                  Text(
+                    'Available: $_heldQuantity shares',
+                    style: const TextStyle(color: Colors.blueAccent, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: quantityController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(color: Colors.white, fontSize: 20),
+                  decoration: const InputDecoration(
+                    labelText: 'Quantity',
+                    labelStyle: TextStyle(color: Colors.grey),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                  ),
+                ),
+                if (isSell && _heldQuantity > 0) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [25, 50, 75, 100].map((pct) {
+                      return InkWell(
+                        onTap: () {
+                          final calculated = (_heldQuantity * (pct / 100));
+                          // 소수점 2자리까지 표시 (필요 시 조정)
+                          quantityController.text = calculated.toStringAsFixed(2);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text('$pct%', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final qty = double.tryParse(quantityController.text) ?? 0;
-              if (qty <= 0) return;
-              
-              Navigator.pop(context);
-              
-              // 로딩 표시용 스낵바
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Processing order...'), duration: Duration(seconds: 1)),
-              );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final qty = double.tryParse(quantityController.text) ?? 0;
+                  if (qty <= 0) return;
+                  
+                  Navigator.pop(context);
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Processing order...'), duration: Duration(seconds: 1)),
+                  );
 
-              final result = await _apiService.placeOrder(widget.symbol, qty, side);
-              
-              if (mounted) {
-                if (result != null && result['status'] == 'success') {
-                  // 성공 알림 (초록색)
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('🎉 ${widget.symbol} $side Order Successful!'),
-                      backgroundColor: Colors.green[600],
-                      duration: const Duration(seconds: 3),
-                    ),
-                  );
-                  // 성공 후 대시보드로 돌아가거나 화면 갱신 가능
-                } else {
-                  // 실패 알림 (빨간색)
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('❌ Order failed. Please check your balance or try again.'),
-                      backgroundColor: Colors.redAccent,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Confirm'),
-          ),
-        ],
+                  final result = await _apiService.placeOrder(widget.symbol, qty, side);
+                  
+                  if (mounted) {
+                    if (result != null && result['status'] == 'success') {
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('🎉 ${widget.symbol} $side Order Successful!'),
+                          backgroundColor: Colors.green[600],
+                        ),
+                      );
+                      // 주문 성공 후 보유 수량 갱신
+                      _fetchInitialData();
+                    } else {
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('❌ Order failed. Please try again.'),
+                          backgroundColor: Colors.redAccent,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Confirm'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildPriceHeader() {
+    if (_data == null) return const SizedBox();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -220,7 +279,6 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
             isCurved: true,
             color: Colors.blueAccent,
             barWidth: 3,
-            isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
@@ -289,6 +347,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   }
 
   Widget _buildRSIChart() {
+    if (_data == null) return const SizedBox();
     List<FlSpot> spots = [];
     for (int i = 0; i < _data!.history.length; i++) {
       if (_data!.history[i].rsi != null) {
