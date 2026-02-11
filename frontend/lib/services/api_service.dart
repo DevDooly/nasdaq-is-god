@@ -1,22 +1,21 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:html' as html;
+import 'dart:convert';
 
 class ApiService {
   static String get _baseUrl {
     if (kIsWeb) {
-      // 웹 환경에서는 현재 브라우저의 접속 주소(IP/도메인)를 기반으로 8001 포트 연결
-      final host = html.window.location.hostname;
-      return 'http://$host:8001';
+      final uri = Uri.base;
+      return 'http://${uri.host}:9000';
     }
-    return 'http://localhost:8001';
+    return 'http://localhost:9000';
   }
 
   final Dio _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,
-    connectTimeout: const Duration(seconds: 5),
-    receiveTimeout: const Duration(seconds: 3),
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 10),
   ));
 
   final _storage = const FlutterSecureStorage();
@@ -36,61 +35,72 @@ class ApiService {
   // 로그인
   Future<Map<String, dynamic>?> login(String username, String password) async {
     try {
-      final response = await _dio.post('/login', data: {
-        'username': username,
-        'password': password,
-      }, options: Options(contentType: Headers.formUrlEncodedContentType));
+      print('🔑 [Login Attempt] User: $username at $_baseUrl');
       
-      String token = response.data['access_token'];
-      await _storage.write(key: 'jwt_token', value: token);
-      return response.data;
+      final response = await _dio.post(
+        '/login',
+        data: {
+          'username': username,
+          'password': password,
+        },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          responseType: ResponseType.json,
+        ),
+      );
+      
+      print('✅ [Login Response] Status: ${response.statusCode}');
+      
+      dynamic data = response.data;
+      if (data is String) {
+        data = jsonDecode(data);
+      }
+
+      if (response.statusCode == 200 && data != null) {
+        final token = data['access_token'];
+        if (token != null) {
+          try {
+            await _storage.write(key: 'jwt_token', value: token);
+            print('💾 [Login Storage] Token saved');
+          } catch (e) {
+            print('⚠️ [Login Storage Warning] $e');
+          }
+          return data;
+        }
+      }
+      return null;
     } catch (e) {
-      print('Login Error: $e');
+      print('🚨 [Login API Error] $e');
       return null;
     }
   }
 
-  // 내 정보 조회
   Future<Map<String, dynamic>?> getMe() async {
     try {
       final response = await _dio.get('/users/me');
-      return response.data;
+      dynamic data = response.data;
+      return data is String ? jsonDecode(data) : data;
     } catch (e) {
       return null;
     }
   }
 
-  // 포트폴리오 조회
   Future<List<dynamic>?> getPortfolio() async {
     try {
       final response = await _dio.get('/portfolio');
-      return response.data;
+      dynamic data = response.data;
+      return data is String ? jsonDecode(data) : data;
     } catch (e) {
       return null;
     }
   }
 
-  // 주식 주문
-  Future<Map<String, dynamic>?> placeOrder(String symbol, double quantity, String side) async {
-    try {
-      final response = await _dio.post('/trade/order', queryParameters: {
-        'symbol': symbol,
-        'quantity': quantity,
-        'side': side,
-      });
-      return response.data;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // 지표 데이터 조회
   Future<Map<String, dynamic>?> getIndicators(String symbol) async {
     try {
       final response = await _dio.get('/stock/$symbol/indicators');
-      return response.data;
+      dynamic data = response.data;
+      return data is String ? jsonDecode(data) : data;
     } catch (e) {
-      print('Fetch Indicators Error: $e');
       return null;
     }
   }
