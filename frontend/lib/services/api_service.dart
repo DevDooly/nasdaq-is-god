@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import 'dart:html' as html;
 
 class ApiService {
   static String get _baseUrl {
@@ -19,20 +21,19 @@ class ApiService {
 
   final _storage = const FlutterSecureStorage();
   
-  // 💡 메모리 백업 토큰
   static String? _backupToken;
 
   ApiService() {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         String? token = _backupToken;
-        
+        if (token == null && kIsWeb) {
+          token = html.window.localStorage['jwt_token'];
+        }
         if (token == null) {
           try {
             token = await _storage.read(key: 'jwt_token');
-          } catch (e) {
-            print('⚠️ Storage Read Error: $e');
-          }
+          } catch (e) {}
         }
 
         if (token != null) {
@@ -43,40 +44,22 @@ class ApiService {
     ));
   }
 
-  // 로그인 (초강력 버전)
   Future<Map<String, dynamic>?> login(String username, String password) async {
     try {
-      print('🔑 Attempting login for $username at $_baseUrl');
+      final formData = FormData.fromMap({'username': username, 'password': password});
+      final response = await _dio.post('/login', data: formData, options: Options(contentType: Headers.formUrlEncodedContentType));
       
-      final response = await _dio.post(
-        '/login',
-        data: {
-          'username': username,
-          'password': password,
-        },
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-        ),
-      );
-      
-      print('📡 Response received: ${response.statusCode}');
-
       if (response.statusCode == 200 && response.data != null) {
         final token = response.data['access_token'];
         if (token != null) {
           _backupToken = token;
-          try {
-            await _storage.write(key: 'jwt_token', value: token);
-          } catch (e) {
-            print('⚠️ Storage Write Skip (Incognito Mode): $e');
-          }
-          print('✅ Login Process Completed');
+          if (kIsWeb) html.window.localStorage['jwt_token'] = token;
+          await _storage.write(key: 'jwt_token', value: token);
           return response.data;
         }
       }
       return null;
     } catch (e) {
-      print('🚨 Login Exception: $e');
       return null;
     }
   }
@@ -93,6 +76,15 @@ class ApiService {
   Future<List<dynamic>?> getPortfolio() async {
     try {
       final response = await _dio.get('/portfolio');
+      return response.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<List<dynamic>?> getTradeHistory() async {
+    try {
+      final response = await _dio.get('/trade/history');
       return response.data;
     } catch (e) {
       return null;
@@ -119,14 +111,7 @@ class ApiService {
 
   Future<Map<String, dynamic>?> placeOrder(String symbol, double quantity, String side) async {
     try {
-      final response = await _dio.post(
-        '/trade/order', 
-        queryParameters: {
-          'symbol': symbol,
-          'quantity': quantity,
-          'side': side,
-        }
-      );
+      final response = await _dio.post('/trade/order', queryParameters: {'symbol': symbol, 'quantity': quantity, 'side': side});
       return response.data;
     } catch (e) {
       return null;

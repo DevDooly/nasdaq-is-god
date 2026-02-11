@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/asset.dart';
 import 'stock_detail_screen.dart';
+import 'trade_history_screen.dart';
 import 'package:intl/intl.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -70,6 +71,13 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Nasdaq is God'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Trade History',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const TradeHistoryScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _fetchData,
