@@ -5,6 +5,7 @@ import 'stock_detail_screen.dart';
 import 'trade_history_screen.dart';
 import 'strategy_screen.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,11 +21,37 @@ class _HomeScreenState extends State<HomeScreen> {
   List<StockAsset>? _portfolio;
   bool _isLoading = true;
   bool _isSearching = false;
+  
+  // 💡 실시간 시세 저장용
+  Map<String, double> _livePrices = {};
+  StreamSubscription? _priceSubscription;
 
   @override
   void initState() {
     super.initState();
     _fetchData();
+    _initWebSocket();
+  }
+
+  @override
+  void dispose() {
+    _priceSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _initWebSocket() {
+    _priceSubscription = _apiService.getPriceStream().listen((event) {
+      if (event['type'] == 'price_update') {
+        final data = event['data'] as Map<String, dynamic>;
+        if (mounted) {
+          setState(() {
+            data.forEach((symbol, val) {
+              _livePrices[symbol] = val['price'].toDouble();
+            });
+          });
+        }
+      }
+    });
   }
 
   Future<void> _fetchData() async {
@@ -172,8 +199,10 @@ class _HomeScreenState extends State<HomeScreen> {
     
     if (_portfolio != null) {
       for (var asset in _portfolio!) {
-        totalMarketValue += asset.quantity * asset.currentPrice;
-        totalProfit += asset.profit;
+        // 💡 실시간 시세가 있으면 우선 사용, 없으면 기존 가격 사용
+        final currentPrice = _livePrices[asset.symbol] ?? asset.currentPrice;
+        totalMarketValue += asset.quantity * currentPrice;
+        totalProfit += (currentPrice - asset.averagePrice) * asset.quantity;
       }
     }
 
@@ -216,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Text('Today Profit: ', style: TextStyle(color: Colors.white60, fontSize: 14)),
+              const Text('Total Profit: ', style: TextStyle(color: Colors.white60, fontSize: 14)),
               Text(
                 '${totalProfit >= 0 ? "+" : ""}\$${NumberFormat('#,##0.00').format(totalProfit)}',
                 style: TextStyle(color: profitColor, fontSize: 16, fontWeight: FontWeight.bold),
@@ -254,7 +283,12 @@ class _HomeScreenState extends State<HomeScreen> {
       separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 1),
       itemBuilder: (context, index) {
         final asset = _portfolio![index];
-        final assetProfitColor = asset.profit >= 0 ? Colors.greenAccent : Colors.redAccent;
+        
+        // 💡 실시간 데이터 반영
+        final currentPrice = _livePrices[asset.symbol] ?? asset.currentPrice;
+        final profit = (currentPrice - asset.averagePrice) * asset.quantity;
+        final profitRate = ((currentPrice / asset.averagePrice) - 1) * 100;
+        final assetProfitColor = profit >= 0 ? Colors.greenAccent : Colors.redAccent;
 
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -272,7 +306,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  '${asset.profitRate >= 0 ? "+" : ""}${asset.profitRate.toStringAsFixed(2)}%',
+                  '${profitRate >= 0 ? "+" : ""}${profitRate.toStringAsFixed(2)}%',
                   style: TextStyle(color: assetProfitColor, fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               )
@@ -287,11 +321,11 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '\$${NumberFormat('#,##0.00').format(asset.currentPrice * asset.quantity)}',
+                '\$${NumberFormat('#,##0.00').format(currentPrice * asset.quantity)}',
                 style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
               ),
               Text(
-                '${asset.profit >= 0 ? "+" : ""}\$${asset.profit.toStringAsFixed(2)}',
+                '${profit >= 0 ? "+" : ""}\$${profit.toStringAsFixed(2)}',
                 style: TextStyle(fontSize: 12, color: assetProfitColor),
               ),
             ],

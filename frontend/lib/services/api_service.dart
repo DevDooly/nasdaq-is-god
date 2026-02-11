@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:html' as html;
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 class ApiService {
   static String get _baseUrl {
@@ -13,6 +14,14 @@ class ApiService {
     return 'http://localhost:9000';
   }
 
+  static String get _wsUrl {
+    if (kIsWeb) {
+      final host = Uri.base.host;
+      return 'ws://$host:9000/ws/prices';
+    }
+    return 'ws://localhost:9000/ws/prices';
+  }
+
   final Dio _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,
     connectTimeout: const Duration(seconds: 15),
@@ -21,16 +30,12 @@ class ApiService {
   ));
 
   final _storage = const FlutterSecureStorage();
-  
-  // 💡 저장소가 막혔을 때를 대비한 메모리 백업
   static String? _backupToken;
 
   ApiService() {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         String? token = _backupToken;
-        
-        // 메모리에 없으면 저장소 시도
         if (token == null) {
           if (kIsWeb) {
             try { token = html.window.localStorage['jwt_token']; } catch (e) {}
@@ -39,8 +44,7 @@ class ApiService {
             try { token = await _storage.read(key: 'jwt_token'); } catch (e) {}
           }
         }
-
-        if (token != null && token.isNotEmpty) {
+        if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
         return handler.next(options);
@@ -48,42 +52,26 @@ class ApiService {
     ));
   }
 
-  // 로그인 (가장 확실한 전송 방식 적용)
+  Stream getPriceStream() {
+    final channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
+    return channel.stream.map((event) => jsonDecode(event));
+  }
+
   Future<Map<String, dynamic>?> login(String username, String password) async {
     try {
-      print('🔑 [API] Attempting login for: $username');
-      
-      // FastAPI OAuth2PasswordRequestForm expects x-www-form-urlencoded
-      // Dio sends this correctly when data is a Map and contentType is set
-      final response = await _dio.post(
-        '/login',
-        data: {
-          'username': username,
-          'password': password,
-        },
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-        ),
-      );
-      
+      final formData = FormData.fromMap({'username': username, 'password': password});
+      final response = await _dio.post('/login', data: formData, options: Options(contentType: Headers.formUrlEncodedContentType));
       if (response.statusCode == 200 && response.data != null) {
-        final data = response.data;
-        final token = data['access_token'];
-        
+        final token = response.data['access_token'];
         if (token != null) {
-          _backupToken = token; // 메모리 우선 저장
-          if (kIsWeb) {
-            try { html.window.localStorage['jwt_token'] = token; } catch (e) {}
-          }
+          _backupToken = token;
+          if (kIsWeb) { try { html.window.localStorage['jwt_token'] = token; } catch (e) {} }
           try { await _storage.write(key: 'jwt_token', value: token); } catch (e) {}
-          
-          print('✅ [API] Login Successful and token cached');
-          return data;
+          return response.data;
         }
       }
       return null;
     } catch (e) {
-      print('🚨 [API] Login Crash: $e');
       return null;
     }
   }
@@ -135,14 +123,7 @@ class ApiService {
 
   Future<Map<String, dynamic>?> placeOrder(String symbol, double quantity, String side) async {
     try {
-      final response = await _dio.post(
-        '/trade/order', 
-        queryParameters: {
-          'symbol': symbol,
-          'quantity': quantity,
-          'side': side,
-        }
-      );
+      final response = await _dio.post('/trade/order', queryParameters: {'symbol': symbol, 'quantity': quantity, 'side': side});
       return response.data;
     } catch (e) {
       return null;
