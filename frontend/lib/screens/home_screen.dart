@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/asset.dart';
+import 'stock_detail_screen.dart';
 import 'package:intl/intl.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -93,7 +94,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildPortfolioSummary() {
     double totalValue = 0;
-    // 실제로는 현재가를 API에서 실시간으로 가져와야 하지만, 일단 평단가 기준으로 표시
     if (_portfolio != null) {
       for (var asset in _portfolio!) {
         totalValue += asset.quantity * asset.averagePrice;
@@ -171,7 +171,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           onTap: () {
-            // TODO: Navigate to Stock Detail (Indicators)
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => StockDetailScreen(symbol: asset.symbol),
+              ),
+            );
           },
         );
       },

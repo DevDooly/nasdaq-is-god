@@ -72,4 +72,15 @@ class ApiService {
       return null;
     }
   }
+
+  // 지표 데이터 조회
+  Future<Map<String, dynamic>?> getIndicators(String symbol) async {
+    try {
+      final response = await _dio.get('/stock/$symbol/indicators');
+      return response.data;
+    } catch (e) {
+      print('Fetch Indicators Error: $e');
+      return null;
+    }
+  }
 }
