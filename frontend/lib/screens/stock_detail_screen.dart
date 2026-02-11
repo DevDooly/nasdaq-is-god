@@ -59,7 +59,6 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 💡 PopScope를 사용하여 브라우저 뒤로가기 버튼 클릭 시 앱 이탈 방지
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -136,11 +135,23 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   void _showOrderDialog(String side) {
     final quantityController = TextEditingController(text: '1');
     final isSell = side.toUpperCase() == 'SELL';
+    bool isButtonEnabled = true;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
+          // 💡 입력값 변경 감지 로직
+          void validateInput() {
+            final qty = double.tryParse(quantityController.text) ?? 0;
+            final isValid = isSell ? (qty > 0 && qty <= _heldQuantity) : (qty > 0);
+            if (isButtonEnabled != isValid) {
+              setDialogState(() {
+                isButtonEnabled = isValid;
+              });
+            }
+          }
+
           return AlertDialog(
             backgroundColor: const Color(0xFF1E293B),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -158,12 +169,16 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                 ],
                 TextField(
                   controller: quantityController,
+                  onChanged: (_) => validateInput(), // 💡 값이 바뀔 때마다 검증
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(color: Colors.white, fontSize: 20),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Quantity',
-                    labelStyle: TextStyle(color: Colors.grey),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    labelStyle: const TextStyle(color: Colors.grey),
+                    errorText: (isSell && (double.tryParse(quantityController.text) ?? 0) > _heldQuantity)
+                        ? 'Insufficient quantity'
+                        : null,
+                    enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                   ),
                 ),
                 if (isSell && _heldQuantity > 0) ...[
@@ -175,6 +190,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                         onTap: () {
                           final calculated = (_heldQuantity * (pct / 100));
                           quantityController.text = calculated.toStringAsFixed(2);
+                          validateInput(); // 💡 버튼 상태 업데이트
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -196,28 +212,13 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                 child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
               ),
               ElevatedButton(
-                onPressed: () async {
-                  final qtyString = quantityController.text;
-                  final qty = double.tryParse(qtyString) ?? 0;
-                  
-                  if (qty <= 0) return;
-
-                  // 💡 매도 시 보유 수량 체크 로직 추가
-                  if (isSell && qty > _heldQuantity) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('❌ Cannot sell more than you own!'),
-                        backgroundColor: Colors.orangeAccent,
-                      ),
-                    );
-                    return;
-                  }
-                  
+                onPressed: isButtonEnabled ? () async {
+                  final qty = double.tryParse(quantityController.text) ?? 0;
                   Navigator.pop(context);
                   
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('⏳ Processing $side order for $qty shares...'),
+                      content: Text('⏳ Processing $side order...'),
                       backgroundColor: Colors.blueGrey,
                       duration: const Duration(seconds: 1),
                     ),
@@ -227,29 +228,26 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                   
                   if (mounted) {
                     ScaffoldMessenger.of(context).clearSnackBars();
-                    
                     if (result != null && result['status'] == 'success') {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('🎉 ${widget.symbol} $side order successful! ($qty shares)'),
+                          content: Text('🎉 ${widget.symbol} $side order successful!'),
                           backgroundColor: Colors.green[700],
                           behavior: SnackBarBehavior.floating,
-                          duration: const Duration(seconds: 4),
                         ),
                       );
                       await _fetchInitialData();
                     } else {
-                      final errorMsg = result != null ? result['error'] : 'Unknown error occurred';
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('❌ $side order failed: $errorMsg'),
+                        const SnackBar(
+                          content: Text('❌ Order failed.'),
                           backgroundColor: Colors.redAccent,
                           behavior: SnackBarBehavior.floating,
                         ),
                       );
                     }
                   }
-                },
+                } : null, // 💡 조건 미달 시 버튼 비활성화 (null)
                 child: const Text('Confirm'),
               ),
             ],
