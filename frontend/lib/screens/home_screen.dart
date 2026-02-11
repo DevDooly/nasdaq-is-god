@@ -19,10 +19,10 @@ class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
   Map<String, dynamic>? _userInfo;
   List<StockAsset>? _portfolio;
+  Map<String, dynamic>? _summary;
   bool _isLoading = true;
   bool _isSearching = false;
   
-  // 💡 실시간 시세 저장용
   Map<String, double> _livePrices = {};
   StreamSubscription? _priceSubscription;
 
@@ -36,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _priceSubscription?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -62,7 +63,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() {
         _userInfo = user;
-        _portfolio = portfolioData?.map((item) => StockAsset.fromJson(item)).toList();
+        if (portfolioData != null) {
+          final assetsList = portfolioData['assets'] as List;
+          _portfolio = assetsList.map((item) => StockAsset.fromJson(item)).toList();
+          _summary = portfolioData['summary'];
+        }
         _isLoading = false;
       });
     }
@@ -82,7 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
           MaterialPageRoute(
             builder: (context) => StockDetailScreen(symbol: result['symbol']),
           ),
-        );
+        ).then((_) => _fetchData()); // 💡 상세페이지 갔다오면 데이터 갱신
       }
     } else {
       if (mounted) {
@@ -101,14 +106,12 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_suggest),
-            tooltip: 'Auto Trading Strategies',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => const StrategyScreen()),
             ),
           ),
           IconButton(
             icon: const Icon(Icons.history),
-            tooltip: 'Trade History',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => const TradeHistoryScreen()),
             ),
@@ -153,25 +156,15 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Welcome back,',
-          style: TextStyle(fontSize: 16, color: Colors.grey[400]),
-        ),
-        Text(
-          _userInfo?['username'] ?? 'User',
-          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
-        ),
+        Text('Welcome back,', style: TextStyle(fontSize: 16, color: Colors.grey[400])),
+        Text(_userInfo?['username'] ?? 'User', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
       ],
     );
   }
 
   Widget _buildSearchBar() {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
-      ),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
       child: TextField(
         controller: _searchController,
         style: const TextStyle(color: Colors.white),
@@ -179,12 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
           hintText: 'Search Ticker (e.g. TSLA, AAPL)',
           hintStyle: const TextStyle(color: Colors.grey),
           prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
-          suffixIcon: _isSearching 
-            ? const SizedBox(width: 20, height: 20, child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)))
-            : IconButton(
-                icon: const Icon(Icons.arrow_forward, color: Colors.blueAccent),
-                onPressed: _handleSearch,
-              ),
+          suffixIcon: _isSearching ? const SizedBox(width: 20, height: 20, child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2))) : IconButton(icon: const Icon(Icons.arrow_forward, color: Colors.blueAccent), onPressed: _handleSearch),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 12),
         ),
@@ -194,17 +182,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPortfolioSummary() {
-    double totalMarketValue = 0;
-    double totalProfit = 0;
-    
-    if (_portfolio != null) {
-      for (var asset in _portfolio!) {
-        // 💡 실시간 시세가 있으면 우선 사용, 없으면 기존 가격 사용
-        final currentPrice = _livePrices[asset.symbol] ?? asset.currentPrice;
-        totalMarketValue += asset.quantity * currentPrice;
-        totalProfit += (currentPrice - asset.averagePrice) * asset.quantity;
-      }
-    }
+    if (_summary == null) return const SizedBox();
+
+    // 💡 실시간 반영을 위해 갱신 루프가 필요할 수 있으나, 현재는 _fetchData 시점 기준
+    double totalEquity = (_summary!['total_equity'] ?? 0).toDouble();
+    double totalProfit = (_summary!['total_profit'] ?? 0).toDouble();
+    double profitRate = (_summary!['total_profit_rate'] ?? 0).toDouble();
+    double cash = (_summary!['cash_balance'] ?? 0).toDouble();
 
     final profitColor = totalProfit >= 0 ? Colors.greenAccent : Colors.redAccent;
 
@@ -212,43 +196,35 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue[700]!, Colors.blue[900]!],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[900]!], begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
+        boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Total Portfolio Value',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '\$${NumberFormat('#,##0.00').format(totalMarketValue)}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          const Text('Total Net Worth (Cash + Stocks)', style: TextStyle(color: Colors.white70, fontSize: 14)),
+          Text('\$${NumberFormat('#,##0.00').format(totalEquity)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Total Profit: ', style: TextStyle(color: Colors.white60, fontSize: 14)),
-              Text(
-                '${totalProfit >= 0 ? "+" : ""}\$${NumberFormat('#,##0.00').format(totalProfit)}',
-                style: TextStyle(color: profitColor, fontSize: 16, fontWeight: FontWeight.bold),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Total Return', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  Text(
+                    '${totalProfit >= 0 ? "+" : ""}\$${NumberFormat('#,##0.00').format(totalProfit)} (${profitRate.toStringAsFixed(2)}%)',
+                    style: TextStyle(color: profitColor, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text('Buying Power (Cash)', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  Text('\$${NumberFormat('#,##0.00').format(cash)}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
               ),
             ],
           )
@@ -259,21 +235,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildAssetList() {
     if (_portfolio == null || _portfolio!.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 40),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.02),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Column(
-          children: [
-            Icon(Icons.pie_chart_outline, size: 48, color: Colors.grey),
-            SizedBox(height: 12),
-            Text('No assets found. Search and buy stocks!', style: TextStyle(color: Colors.grey)),
-          ],
-        ),
-      );
+      return Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 40), decoration: BoxDecoration(color: Colors.white.withOpacity(0.02), borderRadius: BorderRadius.circular(12)), child: const Column(children: [Icon(Icons.pie_chart_outline, size: 48, color: Colors.grey), SizedBox(height: 12), Text('No assets found.', style: TextStyle(color: Colors.grey))]));
     }
 
     return ListView.separated(
@@ -283,8 +245,6 @@ class _HomeScreenState extends State<HomeScreen> {
       separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 1),
       itemBuilder: (context, index) {
         final asset = _portfolio![index];
-        
-        // 💡 실시간 데이터 반영
         final currentPrice = _livePrices[asset.symbol] ?? asset.currentPrice;
         final profit = (currentPrice - asset.averagePrice) * asset.quantity;
         final profitRate = ((currentPrice / asset.averagePrice) - 1) * 100;
@@ -294,48 +254,22 @@ class _HomeScreenState extends State<HomeScreen> {
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
           title: Row(
             children: [
-              Text(
-                asset.symbol,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
-              ),
+              Text(asset.symbol, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
               const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: assetProfitColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  '${profitRate >= 0 ? "+" : ""}${profitRate.toStringAsFixed(2)}%',
-                  style: TextStyle(color: assetProfitColor, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-              )
+              Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: assetProfitColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Text('${profitRate >= 0 ? "+" : ""}${profitRate.toStringAsFixed(2)}%', style: TextStyle(color: assetProfitColor, fontSize: 12, fontWeight: FontWeight.bold)))
             ],
           ),
-          subtitle: Text(
-            '${asset.quantity} shares · Avg \$${asset.averagePrice.toStringAsFixed(2)}',
-            style: const TextStyle(color: Colors.grey, fontSize: 13),
-          ),
+          subtitle: Text('${asset.quantity} shares · Avg \$${asset.averagePrice.toStringAsFixed(2)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                '\$${NumberFormat('#,##0.00').format(currentPrice * asset.quantity)}',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
-              ),
-              Text(
-                '${profit >= 0 ? "+" : ""}\$${profit.toStringAsFixed(2)}',
-                style: TextStyle(fontSize: 12, color: assetProfitColor),
-              ),
+              Text('\$${NumberFormat('#,##0.00').format(currentPrice * asset.quantity)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
+              Text('${profit >= 0 ? "+" : ""}\$${profit.toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: assetProfitColor)),
             ],
           ),
           onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => StockDetailScreen(symbol: asset.symbol),
-              ),
-            );
+            Navigator.of(context).push(MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: asset.symbol))).then((_) => _fetchData());
           },
         );
       },

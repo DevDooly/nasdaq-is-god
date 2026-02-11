@@ -6,6 +6,8 @@ import json
 class UserBase(SQLModel):
     username: str = Field(index=True, unique=True)
     email: Optional[str] = None
+    # 💡 기본 잔고 추가 (기본값 $100,000)
+    cash_balance: float = Field(default=100000.0)
 
 class User(UserBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -53,8 +55,8 @@ class TradingStrategyBase(SQLModel):
     name: str
     symbol: str
     is_active: bool = Field(default=False)
-    strategy_type: str  # e.g., RSI_LIMIT
-    parameters: str = Field(default="{}") # JSON string for params like {"buy_rsi": 30, "sell_rsi": 70}
+    strategy_type: str
+    parameters: str = Field(default="{}")
 
 class TradingStrategy(TradingStrategyBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
