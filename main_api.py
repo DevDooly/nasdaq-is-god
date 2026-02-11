@@ -26,11 +26,10 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     await init_db()
     yield
-    # 서버 종료 시 실행 (필요 시 추가)
 
 app = FastAPI(title="Nasdaq is God API", lifespan=lifespan)
 
-# 브로커 선택
+# 브로커 및 서비스 초기화
 USE_REAL_BROKER = os.getenv("USE_REAL_BROKER", "false").lower() == "true"
 broker = KISBroker() if USE_REAL_BROKER else MockBroker()
 trade_service = TradeService(broker)
@@ -101,20 +100,56 @@ async def signup(user_data: UserCreate, session: AsyncSession = Depends(get_sess
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
+@app.get("/search")
+async def search_stock(q: str = Query(..., min_length=1)):
+    """종목명이나 티커로 검색하여 티커 정보를 반환합니다."""
+    logger.info(f"Search request: {q}")
+    result = await find_ticker(q)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"No ticker found for query: {q}")
+    return result
+
+@app.get("/stock/{symbol}")
+async def get_stock(symbol: str):
+    """특정 종목의 기본 정보를 조회합니다."""
+    data = await get_stock_info(symbol)
+    if "error" in data:
+        raise HTTPException(status_code=404, detail=data["error"])
+    return data
+
 @app.get("/stock/{symbol}/indicators")
 async def get_stock_indicators(symbol: str):
-    return await indicator_service.get_indicators(symbol)
+    """특정 종목의 기술적 지표를 조회합니다."""
+    result = await indicator_service.get_indicators(symbol)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+@app.post("/trade/order")
+async def place_trade_order(
+    symbol: str, 
+    quantity: float, 
+    side: str, 
+    current_user: User = Depends(get_current_user), 
+    session: AsyncSession = Depends(get_session)
+):
+    """주식 주문을 실행합니다."""
+    result = await trade_service.execute_trade(session, current_user, symbol, quantity, side)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
 
 @app.get("/portfolio")
 async def get_portfolio(
     current_user: User = Depends(get_current_user), 
     session: AsyncSession = Depends(get_session)
 ):
+    """사용자의 전체 포트폴리오를 조회합니다."""
     return await trade_service.get_user_portfolio(session, current_user)
 
 @app.get("/")
 async def root():
-    return {"message": "API Running on Port 9000"}
+    return {"message": "Nasdaq is God API is running on Port 9000"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=9000)
