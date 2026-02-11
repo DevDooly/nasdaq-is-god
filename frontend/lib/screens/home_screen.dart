@@ -7,6 +7,7 @@ import 'strategy_screen.dart';
 import 'login_screen.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
+import 'package:fl_chart/fl_chart.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _userInfo;
   List<StockAsset>? _portfolio;
   Map<String, dynamic>? _summary;
+  List<dynamic>? _equityHistory;
   bool _isLoading = true;
   bool _isSearching = false;
   
@@ -58,17 +60,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
-    final user = await _apiService.getMe();
-    final dynamic portfolioRaw = await _apiService.getPortfolio();
+    final results = await Future.wait([
+      _apiService.getMe(),
+      _apiService.getPortfolio(),
+      _apiService.getPortfolioHistory(),
+    ]);
     
     if (mounted) {
       setState(() {
-        _userInfo = user;
-        if (portfolioRaw != null && portfolioRaw is Map<String, dynamic>) {
+        _userInfo = results[0] as Map<String, dynamic>?;
+        final portfolioRaw = results[1] as Map<String, dynamic>?;
+        if (portfolioRaw != null) {
           final assetsList = portfolioRaw['assets'] as List;
           _portfolio = assetsList.map((item) => StockAsset.fromJson(item)).toList();
           _summary = portfolioRaw['summary'] as Map<String, dynamic>?;
         }
+        _equityHistory = results[2] as List<dynamic>?;
         _isLoading = false;
       });
     }
@@ -77,25 +84,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void _handleSearch() async {
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
-
     setState(() => _isSearching = true);
     final result = await _apiService.searchStock(query);
     setState(() => _isSearching = false);
-
-    if (result != null && result['symbol'] != null) {
-      if (mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => StockDetailScreen(symbol: result['symbol']),
-          ),
-        ).then((_) => _fetchData());
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('종목을 찾을 수 없습니다.')),
-        );
-      }
+    if (result != null && result['symbol'] != null && mounted) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: result['symbol']))).then((_) => _fetchData());
     }
   }
 
@@ -105,33 +98,10 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Nasdaq is God'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_suggest),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const StrategyScreen()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.history),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const TradeHistoryScreen()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _fetchData,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await _apiService.logout();
-              if (mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                );
-              }
-            },
-          ),
+          IconButton(icon: const Icon(Icons.settings_suggest), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const StrategyScreen()))),
+          IconButton(icon: const Icon(Icons.history), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TradeHistoryScreen()))),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchData),
+          IconButton(icon: const Icon(Icons.logout), onPressed: () async { await _apiService.logout(); if (mounted) Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const LoginScreen())); }),
         ],
       ),
       backgroundColor: const Color(0xFF0F172A),
@@ -151,10 +121,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 24),
                     _buildPortfolioSummary(),
                     const SizedBox(height: 24),
-                    const Text(
-                      'My Portfolio',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
+                    if (_equityHistory != null && _equityHistory!.isNotEmpty) ...[
+                      const Text('Equity Curve', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white70)),
+                      const SizedBox(height: 12),
+                      _buildEquityChart(),
+                      const SizedBox(height: 24),
+                    ],
+                    const Text('My Portfolio', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                     const SizedBox(height: 12),
                     _buildAssetList(),
                   ],
@@ -165,13 +138,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Welcome back,', style: TextStyle(fontSize: 16, color: Colors.grey[400])),
-        Text(_userInfo?['username'] ?? 'User', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
-      ],
-    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Welcome back,', style: TextStyle(fontSize: 16, color: Colors.grey[400])),
+      Text(_userInfo?['username'] ?? 'User', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+    ]);
   }
 
   Widget _buildSearchBar() {
@@ -195,12 +165,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildPortfolioSummary() {
     if (_summary == null) return const SizedBox();
-
     double totalEquity = (_summary!['total_equity'] ?? 0).toDouble();
     double totalProfit = (_summary!['total_profit'] ?? 0).toDouble();
     double profitRate = (_summary!['total_profit_rate'] ?? 0).toDouble();
     double cash = (_summary!['cash_balance'] ?? 0).toDouble();
-
     final profitColor = totalProfit >= 0 ? Colors.greenAccent : Colors.redAccent;
 
     return Container(
@@ -211,35 +179,50 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Total Net Worth (Cash + Stocks)', style: TextStyle(color: Colors.white70, fontSize: 14)),
-          Text('\$${NumberFormat('#,##0.00').format(totalEquity)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Total Return', style: TextStyle(color: Colors.white60, fontSize: 12)),
-                  Text(
-                    '${totalProfit >= 0 ? "+" : ""}\$${NumberFormat('#,##0.00').format(totalProfit)} (${profitRate.toStringAsFixed(2)}%)',
-                    style: TextStyle(color: profitColor, fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text('Buying Power (Cash)', style: TextStyle(color: Colors.white60, fontSize: 12)),
-                  Text('\$${NumberFormat('#,##0.00').format(cash)}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ],
-          )
-        ],
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Total Net Worth (Cash + Stocks)', style: TextStyle(color: Colors.white70, fontSize: 14)),
+        Text('\$${NumberFormat('#,##0.00').format(totalEquity)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Total Return', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            Text('${totalProfit >= 0 ? "+" : ""}\$${NumberFormat('#,##0.00').format(totalProfit)} (${profitRate.toStringAsFixed(2)}%)', style: TextStyle(color: profitColor, fontSize: 16, fontWeight: FontWeight.bold)),
+          ]),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            const Text('Buying Power (Cash)', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            Text('\$${NumberFormat('#,##0.00').format(cash)}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          ]),
+        ])
+      ]),
+    );
+  }
+
+  Widget _buildEquityChart() {
+    List<FlSpot> spots = [];
+    for (int i = 0; i < _equityHistory!.length; i++) {
+      spots.add(FlSpot(i.toDouble(), (_equityHistory![i]['total_equity'] as num).toDouble()));
+    }
+
+    return Container(
+      height: 150,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: LineChart(
+        LineChartData(
+          gridData: const FlGridData(show: false),
+          titlesData: const FlTitlesData(show: false),
+          borderData: FlBorderData(show: false),
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: true,
+              color: Colors.greenAccent,
+              barWidth: 2,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(show: true, color: Colors.greenAccent.withOpacity(0.05)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -248,7 +231,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_portfolio == null || _portfolio!.isEmpty) {
       return Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 40), decoration: BoxDecoration(color: Colors.white.withOpacity(0.02), borderRadius: BorderRadius.circular(12)), child: const Column(children: [Icon(Icons.pie_chart_outline, size: 48, color: Colors.grey), SizedBox(height: 12), Text('No assets found.', style: TextStyle(color: Colors.grey))]));
     }
-
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -260,28 +242,12 @@ class _HomeScreenState extends State<HomeScreen> {
         final profit = (currentPrice - asset.averagePrice) * asset.quantity;
         final profitRate = ((currentPrice / asset.averagePrice) - 1) * 100;
         final assetProfitColor = profit >= 0 ? Colors.greenAccent : Colors.redAccent;
-
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
-          title: Row(
-            children: [
-              Text(asset.symbol, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
-              const SizedBox(width: 8),
-              Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: assetProfitColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Text('${profitRate >= 0 ? "+" : ""}${profitRate.toStringAsFixed(2)}%', style: TextStyle(color: assetProfitColor, fontSize: 12, fontWeight: FontWeight.bold)))
-            ],
-          ),
+          title: Row(children: [Text(asset.symbol, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: assetProfitColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Text('${profitRate >= 0 ? "+" : ""}${profitRate.toStringAsFixed(2)}%', style: TextStyle(color: assetProfitColor, fontSize: 12, fontWeight: FontWeight.bold)))]),
           subtitle: Text('${asset.quantity} shares · Avg \$${asset.averagePrice.toStringAsFixed(2)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('\$${NumberFormat('#,##0.00').format(currentPrice * asset.quantity)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
-              Text('${profit >= 0 ? "+" : ""}\$${profit.toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: assetProfitColor)),
-            ],
-          ),
-          onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: asset.symbol))).then((_) => _fetchData());
-          },
+          trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [Text('\$${NumberFormat('#,##0.00').format(currentPrice * asset.quantity)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)), Text('${profit >= 0 ? "+" : ""}\$${profit.toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: assetProfitColor))]),
+          onTap: () { Navigator.of(context).push(MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: asset.symbol))).then((_) => _fetchData()); },
         );
       },
     );
