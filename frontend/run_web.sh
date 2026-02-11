@@ -1,12 +1,10 @@
 #!/bin/bash
 
-# Nasdaq is God - Frontend Web Runner (Robust Version)
-# This script ensures the web boilerplate exists and runs the Flutter web server.
+# Nasdaq is God - Frontend Web Runner (Static Server)
+# This script serves the built Flutter web files on port 8080.
 
 PORT=8080
-FLUTTER_BIN="$HOME/flutter/bin/flutter"
-
-echo "🚀 Preparing Nasdaq is God Frontend (Web)..."
+echo "🚀 Preparing Nasdaq is God Frontend (Static Web Server)..."
 
 # 1. 8080 포트 정리
 PID=$(lsof -t -i:$PORT 2>/dev/null || netstat -tulpn 2>/dev/null | grep ":$PORT " | awk '{print $7}' | cut -d/ -f1)
@@ -27,17 +25,19 @@ if [ "$PARENT_DIR" != "frontend" ]; then
     fi
 fi
 
-# 3. Web Boilerplate 체크 및 생성
-if [ ! -d "web" ]; then
-    echo "📦 Web folder missing. Generating web boilerplate..."
-    $FLUTTER_BIN create . --platforms=web
+# 3. 빌드 파일 존재 확인 및 빌드 (필요시)
+if [ ! -d "build/web" ]; then
+    echo "📦 Build folder missing. Running flutter build web..."
+    ~/flutter/bin/flutter build web --release
 fi
 
-# 4. 의존성 설치
-echo "📦 Fetching dependencies..."
-$FLUTTER_BIN pub get
+# 4. Python으로 정적 웹 서버 실행
+echo "🌐 Serving static web files on port $PORT..."
+echo "👉 Access at: http://YOUR_SERVER_IP:$PORT"
 
-# 5. Flutter Web 서버 실행
-echo "🌐 Starting Flutter Web Server on port $PORT..."
-# 0.0.0.0으로 바인딩하여 외부 접속 허용
-$FLUTTER_BIN run -d web-server --web-port $PORT --web-hostname 0.0.0.0
+# build/web 폴더로 이동하여 서버 시작
+cd build/web
+# nohup을 사용하여 백그라운드에서 실행 (선택 사항이나 권장)
+nohup python3 -m http.server $PORT > ../../web_server.log 2>&1 &
+
+echo "✅ Web server started in background. Logs available at frontend/web_server.log"
