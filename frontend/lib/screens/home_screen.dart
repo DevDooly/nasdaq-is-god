@@ -4,6 +4,7 @@ import '../models/asset.dart';
 import 'stock_detail_screen.dart';
 import 'trade_history_screen.dart';
 import 'strategy_screen.dart';
+import 'login_screen.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 
@@ -42,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _initWebSocket() {
     _priceSubscription = _apiService.getPriceStream().listen((event) {
-      if (event['type'] == 'price_update') {
+      if (event != null && event['type'] == 'price_update') {
         final data = event['data'] as Map<String, dynamic>;
         if (mounted) {
           setState(() {
@@ -119,6 +120,17 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _fetchData,
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await _apiService.logout();
+              if (mounted) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                );
+              }
+            },
           ),
         ],
       ),
