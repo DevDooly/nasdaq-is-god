@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import 'dart:html' as html;
 
 class ApiService {
   static String get _baseUrl {
@@ -25,11 +27,15 @@ class ApiService {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         String? token = _backupToken;
+        if (token == null && kIsWeb) {
+          token = html.window.localStorage['jwt_token'];
+        }
         if (token == null) {
           try {
             token = await _storage.read(key: 'jwt_token');
           } catch (e) {}
         }
+
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
@@ -38,38 +44,22 @@ class ApiService {
     ));
   }
 
-  // 로그인 (가장 검증된 원시 로직)
   Future<Map<String, dynamic>?> login(String username, String password) async {
     try {
-      print('🔑 [API] Login Request for $username');
-      
-      final response = await _dio.post(
-        '/login',
-        data: {
-          'username': username,
-          'password': password,
-        },
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-        ),
-      );
+      final formData = FormData.fromMap({'username': username, 'password': password});
+      final response = await _dio.post('/login', data: formData, options: Options(contentType: Headers.formUrlEncodedContentType));
       
       if (response.statusCode == 200 && response.data != null) {
-        final data = response.data;
-        final token = data['access_token'];
-        
+        final token = response.data['access_token'];
         if (token != null) {
           _backupToken = token;
-          try {
-            await _storage.write(key: 'jwt_token', value: token);
-          } catch (e) {}
-          print('✅ [API] Login Successful');
-          return data;
+          if (kIsWeb) html.window.localStorage['jwt_token'] = token;
+          await _storage.write(key: 'jwt_token', value: token);
+          return response.data;
         }
       }
       return null;
     } catch (e) {
-      print('🚨 [API] Login Error: $e');
       return null;
     }
   }
@@ -121,17 +111,48 @@ class ApiService {
 
   Future<Map<String, dynamic>?> placeOrder(String symbol, double quantity, String side) async {
     try {
-      final response = await _dio.post(
-        '/trade/order', 
-        queryParameters: {
-          'symbol': symbol,
-          'quantity': quantity,
-          'side': side,
-        }
-      );
+      final response = await _dio.post('/trade/order', queryParameters: {'symbol': symbol, 'quantity': quantity, 'side': side});
       return response.data;
     } catch (e) {
       return null;
+    }
+  }
+
+  // --- 전략(Strategy) 관련 ---
+
+  Future<List<dynamic>?> getStrategies() async {
+    try {
+      final response = await _dio.get('/strategies');
+      return response.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> createStrategy(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post('/strategies', data: data);
+      return response.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<bool> toggleStrategy(int id) async {
+    try {
+      final response = await _dio.patch('/strategies/$id/toggle');
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> deleteStrategy(int id) async {
+    try {
+      final response = await _dio.delete('/strategies/$id');
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
     }
   }
 }
