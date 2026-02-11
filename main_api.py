@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, Depends, status
+from fastapi import FastAPI, HTTPException, Query, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from core.stock_service import get_stock_info, find_ticker
@@ -37,7 +37,7 @@ indicator_service = IndicatorService()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# CORS 설정
+# CORS 설정: 명시적 허용
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -48,22 +48,33 @@ app.add_middleware(
 
 # 의존성: 현재 로그인한 사용자 가져오기
 async def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme), 
     session: AsyncSession = Depends(get_session)
 ) -> User:
+    # 디버깅: 헤더 정보 출력
+    auth_header = request.headers.get("Authorization")
+    logger.info(f"--- Auth Check ---")
+    logger.info(f"Authorization Header: {auth_header}")
+    
     payload = decode_access_token(token)
     if not payload:
+        logger.warning(f"Invalid or expired token: {token[:10]}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
     username: str = payload.get("sub")
     statement = select(User).where(User.username == username)
     result = await session.execute(statement)
     user = result.scalar_one_or_none()
+    
     if user is None:
+        logger.warning(f"User not found for token: {username}")
         raise HTTPException(status_code=404, detail="User not found")
+    
     return user
 
 @app.post("/login", response_model=Token)
@@ -102,24 +113,14 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
 
 @app.get("/search")
 async def search_stock(q: str = Query(..., min_length=1)):
-    """종목명이나 티커로 검색하여 티커 정보를 반환합니다."""
     logger.info(f"Search request: {q}")
     result = await find_ticker(q)
     if not result:
         raise HTTPException(status_code=404, detail=f"No ticker found for query: {q}")
     return result
 
-@app.get("/stock/{symbol}")
-async def get_stock(symbol: str):
-    """특정 종목의 기본 정보를 조회합니다."""
-    data = await get_stock_info(symbol)
-    if "error" in data:
-        raise HTTPException(status_code=404, detail=data["error"])
-    return data
-
 @app.get("/stock/{symbol}/indicators")
 async def get_stock_indicators(symbol: str):
-    """특정 종목의 기술적 지표를 조회합니다."""
     result = await indicator_service.get_indicators(symbol)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
@@ -133,9 +134,10 @@ async def place_trade_order(
     current_user: User = Depends(get_current_user), 
     session: AsyncSession = Depends(get_session)
 ):
-    """주식 주문을 실행합니다."""
+    logger.info(f"Trade request from {current_user.username}: {side} {quantity} {symbol}")
     result = await trade_service.execute_trade(session, current_user, symbol, quantity, side)
     if "error" in result:
+        logger.error(f"Trade execution error: {result['error']}")
         raise HTTPException(status_code=400, detail=result["error"])
     return result
 
@@ -144,7 +146,6 @@ async def get_portfolio(
     current_user: User = Depends(get_current_user), 
     session: AsyncSession = Depends(get_session)
 ):
-    """사용자의 전체 포트폴리오를 조회합니다."""
     return await trade_service.get_user_portfolio(session, current_user)
 
 @app.get("/")
