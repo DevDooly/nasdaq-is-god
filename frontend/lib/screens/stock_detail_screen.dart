@@ -126,16 +126,34 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
               if (qty <= 0) return;
               
               Navigator.pop(context);
+              
+              // 로딩 표시용 스낵바
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Processing order...'), duration: Duration(seconds: 1)),
+              );
+
               final result = await _apiService.placeOrder(widget.symbol, qty, side);
               
               if (mounted) {
                 if (result != null && result['status'] == 'success') {
+                  // 성공 알림 (초록색)
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${widget.symbol} $side Order Success!')),
+                    SnackBar(
+                      content: Text('🎉 ${widget.symbol} $side Order Successful!'),
+                      backgroundColor: Colors.green[600],
+                      duration: const Duration(seconds: 3),
+                    ),
                   );
+                  // 성공 후 대시보드로 돌아가거나 화면 갱신 가능
                 } else {
+                  // 실패 알림 (빨간색)
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Order failed. Please try again.')),
+                    const SnackBar(
+                      content: Text('❌ Order failed. Please check your balance or try again.'),
+                      backgroundColor: Colors.redAccent,
+                    ),
                   );
                 }
               }
