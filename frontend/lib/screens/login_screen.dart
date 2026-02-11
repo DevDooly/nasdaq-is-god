@@ -13,46 +13,18 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _apiService = ApiService();
-  final _usernameFocusNode = FocusNode();
-  final _passwordFocusNode = FocusNode();
   bool _isLoading = false;
 
-  @override
-  void dispose() {
-    _usernameController.dispose();
-    _passwordController.dispose();
-    _usernameFocusNode.dispose();
-    _passwordFocusNode.dispose();
-    super.dispose();
-  }
-
   void _handleLogin() async {
-    final username = _usernameController.text.trim();
-    final password = _passwordController.text.trim();
-
-    if (username.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('아이디와 비밀번호를 입력해주세요.')),
-      );
-      return;
-    }
-
+    if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) return;
     setState(() => _isLoading = true);
-    final result = await _apiService.login(username, password);
-    
+    final result = await _apiService.login(_usernameController.text, _passwordController.text);
     if (mounted) {
       setState(() => _isLoading = false);
       if (result != null) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
-        );
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const HomeScreen()));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('로그인 실패. 아이디와 비밀번호를 확인해주세요.'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('인증 실패: 자격 증명을 확인하세요.')));
       }
     }
   }
@@ -60,68 +32,64 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32.0),
+      backgroundColor: const Color(0xFF020617),
+      body: Center(
+        child: Container(
+          width: 400,
+          padding: const EdgeInsets.all(40),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.02),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 40)],
+          ),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.trending_up, size: 80, color: Colors.blue),
-              const SizedBox(height: 16),
-              const Text(
-                'Nasdaq is God',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-              ),
+              const Icon(Icons.auto_graph, color: Colors.cyanAccent, size: 64),
+              const SizedBox(height: 24),
+              const Text('NASDAQ IS GOD', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 4)),
+              const Text('QUANT TERMINAL v2.0', style: TextStyle(fontSize: 10, color: Colors.grey, letterSpacing: 2)),
               const SizedBox(height: 48),
-              TextField(
-                controller: _usernameController,
-                focusNode: _usernameFocusNode,
-                textInputAction: TextInputAction.next,
-                autofocus: true,
-                onSubmitted: (_) {
-                  FocusScope.of(context).requestFocus(_passwordFocusNode);
-                },
-                decoration: InputDecoration(
-                  labelText: 'Username',
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                focusNode: _passwordFocusNode,
-                textInputAction: TextInputAction.go,
-                onSubmitted: (_) {
-                  _handleLogin();
-                },
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                obscureText: true,
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleLogin,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  backgroundColor: Colors.blue[600],
-                ),
-                child: _isLoading
+              _buildField('IDENTITY', _usernameController, false),
+              const SizedBox(height: 24),
+              _buildField('ACCESS KEY', _passwordController, true),
+              const SizedBox(height: 48),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _handleLogin,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.cyanAccent[700],
+                    padding: const EdgeInsets.all(20),
+                  ),
+                  child: _isLoading 
                     ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Login', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
+                    : const Text('AUTHORIZE ACCESS', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                ),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildField(String label, TextEditingController ctrl, bool secret) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1)),
+      const SizedBox(height: 8),
+      TextField(
+        controller: ctrl,
+        obscureText: secret,
+        style: const TextStyle(fontFamily: 'monospace', color: Colors.white),
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: Colors.white.withOpacity(0.03),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        ),
+      ),
+    ]);
   }
 }

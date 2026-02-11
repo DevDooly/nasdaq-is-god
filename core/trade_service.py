@@ -3,6 +3,7 @@ from sqlmodel import select
 from core.models import User, StockAsset, TradeLog, EquitySnapshot
 from core.broker import TradingBroker
 from core.stock_service import get_stock_info
+from core.notification_service import notification_service
 from bot.config import logger
 from datetime import datetime
 import asyncio
@@ -99,6 +100,16 @@ class TradeService:
                 await session.delete(asset)
 
         await session.commit()
+
+        # 💡 [알림] 매매 체결 알림 발송
+        asyncio.create_task(notification_service.notify_user(
+            user.id, 
+            {
+                "title": f"주문 체결 완료: {symbol}",
+                "body": f"{side} {quantity}주가 ${current_price:.2f}에 체결되었습니다.\n잔고: ${db_user.cash_balance:.2f}"
+            }
+        ))
+
         return {
             "status": "success",
             "order_id": order_result["order_id"],

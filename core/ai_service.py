@@ -3,6 +3,7 @@ import google.generativeai as genai
 import json
 import logging
 import time
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger("ai_service")

@@ -17,7 +17,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final ApiService _apiService = ApiService();
   final _searchController = TextEditingController();
   Map<String, dynamic>? _userInfo;
@@ -29,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSearching = false;
   
   Map<String, double> _livePrices = {};
+  Map<String, Color> _priceBlinkColors = {};
   StreamSubscription? _updateSubscription;
 
   @override
@@ -54,7 +55,14 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) {
           setState(() {
             data.forEach((symbol, val) {
-              _livePrices[symbol] = val['price'].toDouble();
+              double newPrice = val['price'].toDouble();
+              if (_livePrices.containsKey(symbol) && _livePrices[symbol] != newPrice) {
+                _priceBlinkColors[symbol] = newPrice > _livePrices[symbol]! ? Colors.greenAccent : Colors.redAccent;
+                Timer(const Duration(milliseconds: 500), () {
+                  if (mounted) setState(() => _priceBlinkColors.remove(symbol));
+                });
+              }
+              _livePrices[symbol] = newPrice;
             });
           });
         }
@@ -67,25 +75,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showRealtimeNotification(String title, String body) {
     if (!mounted) return;
-    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        content: Row(
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-            Text(body, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+            const Icon(Icons.notifications_active, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(body, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+            ])),
           ],
         ),
         backgroundColor: Colors.blueAccent[700],
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: '닫기',
-          textColor: Colors.white,
-          onPressed: () {},
-        ),
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -115,17 +120,309 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _handleSearch() async {
-    final query = _searchController.text.trim();
-    if (query.isEmpty) return;
-    setState(() => _isSearching = true);
-    final result = await _apiService.searchStock(query);
-    setState(() => _isSearching = false);
-    if (result != null && result['symbol'] != null && mounted) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: result['symbol']))).then((_) => _fetchData());
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('종목을 찾을 수 없습니다.')));
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF020617),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
+          : Row(
+              children: [
+                if (MediaQuery.of(context).size.width > 900) _buildSidebar(),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _fetchData,
+                    color: Colors.cyanAccent,
+                    child: CustomScrollView(
+                      slivers: [
+                        _buildAppBar(),
+                        SliverPadding(
+                          padding: const EdgeInsets.all(24),
+                          sliver: SliverList(
+                            delegate: SliverChildListDelegate([
+                              _buildTopRow(),
+                              const SizedBox(height: 24),
+                              _buildMainContent(),
+                            ]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildSidebar() {
+    return Container(
+      width: 80,
+      color: const Color(0xFF020617),
+      child: Column(
+        children: [
+          const SizedBox(height: 40),
+          const Icon(Icons.auto_graph, color: Colors.cyanAccent, size: 32),
+          const Spacer(),
+          _sidebarIcon(Icons.dashboard, true),
+          _sidebarIcon(Icons.settings_suggest, false, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const StrategyScreen()))),
+          _sidebarIcon(Icons.history, false, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TradeHistoryScreen()))),
+          _sidebarIcon(Icons.settings, false, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()))),
+          const Spacer(),
+          _sidebarIcon(Icons.logout, false, onTap: () async {
+            await _apiService.logout();
+            if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+          }),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _sidebarIcon(IconData icon, bool active, {VoidCallback? onTap}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: InkWell(
+        onTap: onTap,
+        child: Icon(icon, color: active ? Colors.cyanAccent : Colors.grey[600], size: 28),
+      ),
+    );
+  }
+
+  Widget _buildAppBar() {
+    bool isAutoEnabled = _userInfo?['is_auto_trading_enabled'] ?? true;
+    return SliverAppBar(
+      floating: true,
+      pinned: true,
+      backgroundColor: const Color(0xFF020617).withOpacity(0.8),
+      title: Row(
+        children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('TERMINAL', style: TextStyle(fontSize: 12, color: Colors.cyanAccent.withOpacity(0.7), letterSpacing: 2)),
+            Text('Nasdaq is God', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22)),
+          ]),
+          const SizedBox(width: 16),
+          _buildLiveIndicator(),
+        ],
+      ),
+      actions: [
+        IconButton(
+          icon: Icon(isAutoEnabled ? Icons.play_circle_fill : Icons.pause_circle_filled, 
+               color: isAutoEnabled ? Colors.greenAccent : Colors.orangeAccent, size: 28),
+          onPressed: () async {
+            await _apiService.toggleMasterAutoTrading();
+            _fetchData();
+          },
+        ),
+        if (MediaQuery.of(context).size.width <= 900) ...[
+          IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()))),
+          IconButton(icon: const Icon(Icons.logout), onPressed: () async {
+            await _apiService.logout();
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+          }),
+        ],
+        const SizedBox(width: 12),
+      ],
+    );
+  }
+
+  Widget _buildLiveIndicator() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: Colors.greenAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.greenAccent.withOpacity(0.3))),
+      child: Row(children: [
+        Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        const Text('LIVE', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+
+  Widget _buildTopRow() {
+    return LayoutBuilder(builder: (context, constraints) {
+      if (constraints.maxWidth > 800) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 3, child: _buildPortfolioSummary()),
+            const SizedBox(width: 24),
+            Expanded(flex: 2, child: _buildMarketSentimentCard()),
+          ],
+        );
+      } else {
+        return Column(children: [
+          _buildPortfolioSummary(),
+          const SizedBox(height: 24),
+          _buildMarketSentimentCard(),
+        ]);
+      }
+    });
+  }
+
+  Widget _buildPortfolioSummary() {
+    if (_summary == null) return const SizedBox();
+    double totalEquity = (_summary!['total_equity'] ?? 0).toDouble();
+    double totalProfit = (_summary!['total_profit'] ?? 0).toDouble();
+    double profitRate = (_summary!['total_profit_rate'] ?? 0).toDouble();
+    final profitColor = totalProfit >= 0 ? Colors.greenAccent : Colors.redAccent;
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: _glassDecoration(),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('TOTAL NET WORTH', style: TextStyle(color: Colors.cyanAccent.withOpacity(0.5), fontSize: 12, letterSpacing: 1)),
+        const SizedBox(height: 8),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text('\$${NumberFormat('#,##0.00').format(totalEquity)}', style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(width: 12),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text('${totalProfit >= 0 ? "+" : ""}${profitRate.toStringAsFixed(2)}%', style: TextStyle(color: profitColor, fontWeight: FontWeight.bold, fontSize: 18)),
+          ),
+        ]),
+        const SizedBox(height: 24),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          _summaryItem('Buying Power', '\$${NumberFormat('#,##0.00').format(_summary!['cash_balance'])}'),
+          _summaryItem('Unrealized P/L', '\$${NumberFormat('#,##0.00').format(totalProfit)}', color: profitColor),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _summaryItem(String label, String value, {Color? color}) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+      Text(value, style: TextStyle(color: color ?? Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+    ]);
+  }
+
+  Widget _buildMarketSentimentCard() {
+    if (_marketSentiment == null) return const SizedBox();
+    if (_marketSentiment!['error'] != null) {
+      return Container(padding: const EdgeInsets.all(24), decoration: _glassDecoration(), child: const Center(child: Text('AI Offline', style: TextStyle(color: Colors.grey))));
     }
+    final score = _marketSentiment!['score'] ?? 50;
+    final sentiment = _marketSentiment!['sentiment'] ?? 'Neutral';
+    final summary = _marketSentiment!['summary'] ?? '';
+    
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: _glassDecoration(color: Colors.purpleAccent.withOpacity(0.05)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text('MARKET PULSE', style: TextStyle(color: Colors.purpleAccent, fontSize: 12, letterSpacing: 1, fontWeight: FontWeight.bold)),
+          Text('$score/100', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 16),
+        Text(sentiment.toUpperCase(), style: TextStyle(color: score >= 50 ? Colors.greenAccent : Colors.redAccent, fontSize: 24, fontWeight: FontWeight.w900)), // Fixed
+        const SizedBox(height: 8),
+        Text(summary, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+      ]),
+    );
+  }
+
+  Widget _buildMainContent() {
+    return LayoutBuilder(builder: (context, constraints) {
+      if (constraints.maxWidth > 1000) {
+        return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(flex: 3, child: _buildAssetSection()),
+          const SizedBox(width: 24),
+          Expanded(flex: 2, child: _buildEquityCurveSection()),
+        ]);
+      } else {
+        return Column(children: [
+          _buildEquityCurveSection(),
+          const SizedBox(height: 24),
+          _buildAssetSection(),
+        ]);
+      }
+    });
+  }
+
+  Widget _buildAssetSection() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        const Text('PORTFOLIO TRACKER', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        TextButton.icon(onPressed: _showLiquidationDialog, icon: const Icon(Icons.bolt, color: Colors.redAccent), label: const Text('LIQUIDATE', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
+      ]),
+      const SizedBox(height: 16),
+      _buildAssetList(),
+    ]);
+  }
+
+  Widget _buildEquityCurveSection() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('EQUITY PERFORMANCE', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 16),
+      Container(padding: const EdgeInsets.all(20), decoration: _glassDecoration(), child: _buildEquityChart()),
+    ]);
+  }
+
+  Widget _buildAssetList() {
+    if (_portfolio == null || _portfolio!.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('Empty Portfolio')));
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _portfolio!.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final asset = _portfolio![index];
+        final curPrice = _livePrices[asset.symbol] ?? asset.currentPrice;
+        final blinkColor = _priceBlinkColors[asset.symbol];
+        final profitRate = ((curPrice / asset.averagePrice) - 1) * 100;
+
+        return InkWell(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: asset.symbol))).then((_) => _fetchData()),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: _glassDecoration(color: blinkColor?.withOpacity(0.1)),
+            child: Row(children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(asset.symbol, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text('${asset.quantity} shares', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              ]),
+              const Spacer(),
+              _buildPriceColumn(curPrice, profitRate, blinkColor),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPriceColumn(double price, double rate, Color? blink) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+      Text('\$${price.toStringAsFixed(2)}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: blink ?? Colors.white, fontFamily: 'monospace')),
+      Text('${rate >= 0 ? "+" : ""}${rate.toStringAsFixed(2)}%', style: TextStyle(color: rate >= 0 ? Colors.greenAccent : Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+    ]);
+  }
+
+  Widget _buildEquityChart() {
+    if (_equityHistory == null || _equityHistory!.isEmpty) return const SizedBox(height: 200, child: Center(child: Text('No data')));
+    List<FlSpot> spots = [];
+    for (int i = 0; i < _equityHistory!.length; i++) {
+      spots.add(FlSpot(i.toDouble(), (_equityHistory![i]['total_equity'] as num).toDouble()));
+    }
+    return SizedBox(
+      height: 250,
+      child: LineChart(LineChartData(
+        gridData: const FlGridData(show: false),
+        titlesData: const FlTitlesData(show: false),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: Colors.cyanAccent,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [Colors.cyanAccent.withOpacity(0.2), Colors.cyanAccent.withOpacity(0)], begin: Alignment.topCenter, end: Alignment.bottomCenter)),
+          ),
+        ],
+      )),
+    );
   }
 
   void _showLiquidationDialog() {
@@ -182,7 +479,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
                 onPressed: selectedSymbols.isEmpty ? null : () async {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⏳ Liquidating selected positions...')));
                   await _apiService.liquidatePositions(selectedSymbols);
                   _fetchData();
                 },
@@ -195,181 +491,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    bool isAutoEnabled = _userInfo?['is_auto_trading_enabled'] ?? true;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Nasdaq is God'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, size: 20),
-            tooltip: 'Settings',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SettingsScreen())).then((_) => _fetchData()),
-          ),
-          IconButton(
-            icon: Icon(isAutoEnabled ? Icons.play_circle_fill : Icons.pause_circle_filled, color: isAutoEnabled ? Colors.greenAccent : Colors.orangeAccent),
-            tooltip: 'Master Auto-Trading Switch',
-            onPressed: () async { await _apiService.toggleMasterAutoTrading(); _fetchData(); },
-          ),
-          IconButton(icon: const Icon(Icons.settings_suggest), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const StrategyScreen()))),
-          IconButton(icon: const Icon(Icons.history), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TradeHistoryScreen()))),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchData),
-          IconButton(icon: const Icon(Icons.logout), onPressed: () async { await _apiService.logout(); if (mounted) Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const LoginScreen())); }),
-        ],
-      ),
-      backgroundColor: const Color(0xFF0F172A),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _fetchData,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 20),
-                    if (_marketSentiment != null) ...[
-                      _buildMarketSentimentCard(),
-                      const SizedBox(height: 20),
-                    ],
-                    _buildSearchBar(),
-                    const SizedBox(height: 24),
-                    _buildPortfolioSummary(),
-                    const SizedBox(height: 24),
-                    if (_equityHistory != null && _equityHistory!.isNotEmpty) ...[
-                      const Text('Equity Curve', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white70)),
-                      const SizedBox(height: 12),
-                      _buildEquityChart(),
-                      const SizedBox(height: 24),
-                    ],
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('My Portfolio', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-                        TextButton.icon(onPressed: _showLiquidationDialog, icon: const Icon(Icons.exit_to_app, color: Colors.redAccent, size: 18), label: const Text('Liquidate', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _buildAssetList(),
-                  ],
-                ),
-              ),
-            ),
-    );
-  }
-
-  Widget _buildMarketSentimentCard() {
-    if (_marketSentiment!['error'] != null) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.white.withOpacity(0.03), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)),
-        child: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
-            const SizedBox(width: 12),
-            Expanded(child: Text(_marketSentiment!['error'], style: const TextStyle(color: Colors.white70, fontSize: 13))),
-          ],
-        ),
-      );
-    }
-
-    final score = _marketSentiment!['score'] ?? 50;
-    final sentiment = _marketSentiment!['sentiment'] ?? 'Neutral';
-    final summary = _marketSentiment!['summary'] ?? '';
-    final keywords = List<String>.from(_marketSentiment!['keywords'] ?? []);
-    Color cardColor;
-    if (score >= 60) cardColor = Colors.green[900]!; else if (score <= 40) cardColor = Colors.red[900]!; else cardColor = Colors.blueGrey[800]!;
-    return Container(width: double.infinity, padding: const EdgeInsets.all(16), decoration: BoxDecoration(gradient: LinearGradient(colors: [cardColor.withOpacity(0.8), cardColor.withOpacity(0.4)]), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Row(children: [Icon(Icons.psychology, color: Colors.white, size: 24), SizedBox(width: 8), Text('AI Market Briefing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))]), Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)), child: Text('$sentiment ($score/100)', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))]), const SizedBox(height: 12), Text(summary, style: const TextStyle(color: Colors.white, fontSize: 14)), if (keywords.isNotEmpty) ...[const SizedBox(height: 12), Wrap(spacing: 8, children: keywords.map((k) => Chip(label: Text('#$k', style: const TextStyle(fontSize: 11, color: Colors.white)), backgroundColor: Colors.black26, padding: EdgeInsets.zero, labelPadding: const EdgeInsets.symmetric(horizontal: 8), visualDensity: VisualDensity.compact)).toList())]]));
-  }
-
-  Widget _buildHeader() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Welcome back,', style: TextStyle(fontSize: 16, color: Colors.grey[400])),
-      Text(_userInfo?['username'] ?? 'User', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
-    ]);
-  }
-
-  Widget _buildSearchBar() {
-    return Container(
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
-      child: TextField(
-        controller: _searchController,
-        style: const TextStyle(color: Colors.white),
-        decoration: InputDecoration(
-          hintText: 'Search Ticker (e.g. TSLA, AAPL)',
-          hintStyle: const TextStyle(color: Colors.grey),
-          prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
-          suffixIcon: _isSearching ? const SizedBox(width: 20, height: 20, child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2))) : IconButton(icon: const Icon(Icons.arrow_forward, color: Colors.blueAccent), onPressed: _handleSearch),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
-        ),
-        onSubmitted: (_) => _handleSearch(),
-      ),
-    );
-  }
-
-  Widget _buildPortfolioSummary() {
-    if (_summary == null) return const SizedBox();
-    double totalEquity = (_summary!['total_equity'] ?? 0).toDouble();
-    double totalProfit = (_summary!['total_profit'] ?? 0).toDouble();
-    double profitRate = (_summary!['total_profit_rate'] ?? 0).toDouble();
-    double cash = (_summary!['cash_balance'] ?? 0).toDouble();
-    final profitColor = totalProfit >= 0 ? Colors.greenAccent : Colors.redAccent;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[900]!], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))]),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Total Net Worth (Cash + Stocks)', style: TextStyle(color: Colors.white70, fontSize: 14)),
-        Text('\$${NumberFormat('#,##0.00').format(totalEquity)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Total Return', style: TextStyle(color: Colors.white60, fontSize: 12)),
-            Text('${totalProfit >= 0 ? "+" : ""}\$${NumberFormat('#,##0.00').format(totalProfit)} (${profitRate.toStringAsFixed(2)}%)', style: TextStyle(color: profitColor, fontSize: 16, fontWeight: FontWeight.bold)),
-          ]),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            const Text('Buying Power (Cash)', style: TextStyle(color: Colors.white60, fontSize: 12)),
-            Text('\$${NumberFormat('#,##0.00').format(cash)}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-          ]),
-        ])
-      ]),
-    );
-  }
-
-  Widget _buildEquityChart() {
-    List<FlSpot> spots = [];
-    for (int i = 0; i < _equityHistory!.length; i++) { spots.add(FlSpot(i.toDouble(), (_equityHistory![i]['total_equity'] as num).toDouble())); }
-    return Container(height: 150, width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 8), child: LineChart(LineChartData(gridData: const FlGridData(show: false), titlesData: const FlTitlesData(show: false), borderData: FlBorderData(show: false), lineBarsData: [LineChartBarData(spots: spots, isCurved: true, color: Colors.greenAccent, barWidth: 2, dotData: const FlDotData(show: false), belowBarData: BarAreaData(show: true, color: Colors.greenAccent.withOpacity(0.05)))])));
-  }
-
-  Widget _buildAssetList() {
-    if (_portfolio == null || _portfolio!.isEmpty) {
-      return Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 40), decoration: BoxDecoration(color: Colors.white.withOpacity(0.02), borderRadius: BorderRadius.circular(12)), child: const Column(children: [Icon(Icons.pie_chart_outline, size: 48, color: Colors.grey), SizedBox(height: 12), Text('No assets found.', style: TextStyle(color: Colors.grey))]));
-    }
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _portfolio!.length,
-      separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 1),
-      itemBuilder: (context, index) {
-        final asset = _portfolio![index];
-        final currentPrice = _livePrices[asset.symbol] ?? asset.currentPrice;
-        final profit = (currentPrice - asset.averagePrice) * asset.quantity;
-        final profitRate = ((currentPrice / asset.averagePrice) - 1) * 100;
-        final assetProfitColor = profit >= 0 ? Colors.greenAccent : Colors.redAccent;
-        return ListTile(
-          contentPadding: const EdgeInsets.symmetric(vertical: 8),
-          title: Row(children: [Text(asset.symbol, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: assetProfitColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Text('${profitRate >= 0 ? "+" : ""}${profitRate.toStringAsFixed(2)}%', style: TextStyle(color: assetProfitColor, fontSize: 12, fontWeight: FontWeight.bold)))]),
-          subtitle: Text('${asset.quantity} shares · Avg \$${asset.averagePrice.toStringAsFixed(2)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-          trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [Text('\$${NumberFormat('#,##0.00').format(currentPrice * asset.quantity)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)), Text('${profit >= 0 ? "+" : ""}\$${profit.toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: assetProfitColor))]),
-          onTap: () { Navigator.of(context).push(MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: asset.symbol))).then((_) => _fetchData()); },
-        );
-      },
+  BoxDecoration _glassDecoration({Color? color}) {
+    return BoxDecoration(
+      color: color ?? Colors.white.withOpacity(0.03),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.white.withOpacity(0.08)),
+      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))],
     );
   }
 }

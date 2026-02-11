@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Query, Depends, status, Request, Web
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from core.stock_service import get_stock_info, find_ticker, get_stock_news
-from core.database import init_db, get_session
+from core.database import init_db, get_session, engine
 from core.models import User, UserCreate, UserRead, Token, TradingStrategy, StrategyCreate, StrategyRead, StockAsset, AISentimentHistory, APIKeyConfig
 from core.auth import get_password_hash, verify_password, create_access_token, decode_access_token
 from core.trade_service import TradeService
@@ -13,7 +13,9 @@ from core.indicator_service import IndicatorService
 from core.strategy_service import StrategyService
 from core.ai_service import AIService
 from core.worker import TradingWorker
+from core.notification_service import notification_service
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import sessionmaker
 from sqlmodel import select
 from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Set, Optional
@@ -37,13 +39,36 @@ trade_service = TradeService(broker)
 strategy_service = StrategyService(indicator_service)
 trading_worker = TradingWorker(strategy_service, trade_service)
 
+async def price_broadcaster():
+    """실시간 시세 브로드캐스트 루프"""
+    while True:
+        try:
+            if notification_service.active_connections:
+                tickers = ["TSLA", "AAPL", "NVDA", "QQQ", "^IXIC"]
+                updates = {}
+                async def get_price(symbol):
+                    data = await get_stock_info(symbol)
+                    if "error" not in data:
+                        return symbol, {"price": data["currentPrice"], "change": data["changePercent"]}
+                    return symbol, None
+                results = await asyncio.gather(*[get_price(t) for t in tickers])
+                for symbol, val in results:
+                    if val: updates[symbol] = val
+                if updates:
+                    await notification_service.broadcast({"type": "price_update", "data": updates})
+        except Exception as e:
+            logger.error(f"Broadcaster error: {e}")
+        await asyncio.sleep(10)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     worker_task = asyncio.create_task(trading_worker.start(interval_seconds=60))
+    broadcaster_task = asyncio.create_task(price_broadcaster())
     yield
     trading_worker.stop()
     worker_task.cancel()
+    broadcaster_task.cancel()
 
 app = FastAPI(title="Nasdaq is God API", lifespan=lifespan)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
@@ -61,6 +86,36 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSe
     if user is None: raise HTTPException(status_code=404, detail="User not found")
     return user
 
+async def get_active_api_key(user: User, session: AsyncSession) -> Optional[str]:
+    statement = select(APIKeyConfig).where(APIKeyConfig.user_id == user.id, APIKeyConfig.is_active == True)
+    result = await session.execute(statement)
+    config = result.scalar_one_or_none()
+    return config.key_value if config else None
+
+# --- WebSocket ---
+@app.websocket("/ws/updates")
+async def websocket_updates(websocket: WebSocket, token: str = Query(...)):
+    """실시간 시세 및 알림을 위한 통합 WebSocket 엔드포인트"""
+    payload = decode_access_token(token)
+    if not payload:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    
+    username = payload.get("sub")
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with async_session() as session:
+        user = (await session.execute(select(User).where(User.username == username))).scalar_one_or_none()
+        if not user:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        
+        await notification_service.connect(user.id, websocket)
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            notification_service.disconnect(user.id, websocket)
+
 # --- Auth ---
 @app.post("/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: AsyncSession = Depends(get_session)):
@@ -70,6 +125,17 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Async
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
     return {"access_token": create_access_token(data={"sub": user.username}), "token_type": "bearer"}
+
+@app.post("/signup", response_model=UserRead)
+async def signup(user_data: UserCreate, session: AsyncSession = Depends(get_session)):
+    statement = select(User).where(User.username == user_data.username)
+    result = await session.execute(statement)
+    if result.scalar_one_or_none(): raise HTTPException(status_code=400, detail="Already registered")
+    db_user = User(username=user_data.username, email=user_data.email, hashed_password=get_password_hash(user_data.password))
+    session.add(db_user)
+    await session.commit()
+    await session.refresh(db_user)
+    return db_user
 
 # --- AI API Keys ---
 @app.get("/settings/api-keys")
@@ -118,17 +184,14 @@ async def get_stock_sentiment(
         history = (await session.execute(statement)).scalar_one_or_none()
         if history: return {**history.dict(), "sources": json.loads(history.sources), "is_history": True}
 
-    # 💡 모든 키를 가져와서 로테이션 시도
-    key_configs_stmt = select(APIKeyConfig).where(APIKeyConfig.user_id == current_user.id)
-    key_configs = (await session.execute(key_configs_stmt)).scalars().all()
-    configs_list = [k.dict() for k in key_configs] # 키 값 포함
+    key_configs = (await session.execute(select(APIKeyConfig).where(APIKeyConfig.user_id == current_user.id))).scalars().all()
+    configs_list = [k.dict() for k in key_configs]
 
     news = await get_stock_news(symbol)
     analysis = await ai_service.analyze_sentiment_with_rotation(symbol, news, configs_list, model_name=model)
     
     if "error" in analysis: return analysis
 
-    # 성공한 키의 사용량 업데이트
     used_key_id = analysis.get("used_key_id")
     if used_key_id:
         used_key = (await session.execute(select(APIKeyConfig).where(APIKeyConfig.id == used_key_id))).scalar_one()
@@ -234,6 +297,6 @@ async def delete_strategy(strategy_id: int, current_user: User = Depends(get_cur
     return {"status": "success"}
 
 @app.get("/")
-async def root(): return {"message": "Nasdaq is God API - Auto-Rotation Ready"}
+async def root(): return {"message": "Nasdaq is God API - Real-time Ready"}
 
 if __name__ == "__main__": uvicorn.run(app, host="0.0.0.0", port=9000)

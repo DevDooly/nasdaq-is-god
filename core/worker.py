@@ -5,6 +5,7 @@ from core.database import engine
 from core.models import TradingStrategy, User
 from core.strategy_service import StrategyService
 from core.trade_service import TradeService
+from core.notification_service import notification_service
 from bot.config import logger
 from sqlalchemy.orm import sessionmaker
 
@@ -24,7 +25,6 @@ class TradingWorker:
             users_result = await session.execute(users_statement)
             all_users = users_result.scalars().all()
             
-            # 💡 각 사용자별 마스터 스위치 상태 맵 생성
             user_switch_map = {user.id: user.is_auto_trading_enabled for user in all_users}
 
             # 2. 자산 스냅샷 기록
@@ -43,16 +43,23 @@ class TradingWorker:
 
             for strategy in active_strategies:
                 try:
-                    # 💡 [핵심] 마스터 스위치가 꺼져있으면 해당 사용자의 전략 건너뜀
                     if not user_switch_map.get(strategy.user_id, True):
-                        logger.info(f"⏸️ Skipping strategy {strategy.name} (User auto-trading DISABLED)")
                         continue
 
-                    # 전략 평가 및 매매 실행
+                    # 전략 평가
                     action = await self.strategy_service.evaluate_strategy(strategy)
                     if action in ["BUY", "SELL"]:
                         user = next((u for u in all_users if u.id == strategy.user_id), None)
                         if user:
+                            # 💡 [알림] 전략 발동 알림
+                            await notification_service.notify_user(
+                                user.id,
+                                {
+                                    "title": f"🚀 자동매매 전략 발동: {strategy.name}",
+                                    "body": f"{strategy.symbol} 종목에 대해 {action} 시그널이 포착되어 주문을 실행합니다."
+                                }
+                            )
+                            
                             await self.trade_service.execute_trade(session, user, strategy.symbol, 1.0, action)
                             logger.info(f"✅ Auto-Trade Executed: {action} {strategy.symbol}")
                 
