@@ -151,12 +151,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPortfolioSummary() {
-    double totalValue = 0;
+    double totalMarketValue = 0;
+    double totalProfit = 0;
+    
     if (_portfolio != null) {
       for (var asset in _portfolio!) {
-        totalValue += asset.quantity * asset.averagePrice;
+        totalMarketValue += asset.quantity * asset.currentPrice;
+        totalProfit += asset.profit;
       }
     }
+
+    final profitColor = totalProfit >= 0 ? Colors.greenAccent : Colors.redAccent;
 
     return Container(
       width: double.infinity,
@@ -180,18 +185,28 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Estimated Total Balance',
+            'Total Portfolio Value',
             style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
-            '\$${NumberFormat('#,##0.00').format(totalValue)}',
+            '\$${NumberFormat('#,##0.00').format(totalMarketValue)}',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 32,
               fontWeight: FontWeight.bold,
             ),
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Text('Today Profit: ', style: TextStyle(color: Colors.white60, fontSize: 14)),
+              Text(
+                '${totalProfit >= 0 ? "+" : ""}\$${NumberFormat('#,##0.00').format(totalProfit)}',
+                style: TextStyle(color: profitColor, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          )
         ],
       ),
     );
@@ -223,24 +238,45 @@ class _HomeScreenState extends State<HomeScreen> {
       separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 1),
       itemBuilder: (context, index) {
         final asset = _portfolio![index];
+        final assetProfitColor = asset.profit >= 0 ? Colors.greenAccent : Colors.redAccent;
+
         return ListTile(
-          contentPadding: const EdgeInsets.symmetric(vertical: 4),
-          title: Text(
-            asset.symbol,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          title: Row(
+            children: [
+              Text(
+                asset.symbol,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: assetProfitColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${asset.profitRate >= 0 ? "+" : ""}${asset.profitRate.toStringAsFixed(2)}%',
+                  style: TextStyle(color: assetProfitColor, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              )
+            ],
           ),
-          subtitle: Text('${asset.quantity} shares', style: const TextStyle(color: Colors.grey)),
+          subtitle: Text(
+            '${asset.quantity} shares · Avg \$${asset.averagePrice.toStringAsFixed(2)}',
+            style: const TextStyle(color: Colors.grey, fontSize: 13),
+          ),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '\$${NumberFormat('#,##0.00').format(asset.averagePrice)}',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                '\$${NumberFormat('#,##0.00').format(asset.currentPrice * asset.quantity)}',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
               ),
-              const Text(
-                'Avg. Price',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+              Text(
+                '${asset.profit >= 0 ? "+" : ""}\$${asset.profit.toStringAsFixed(2)}',
+                style: TextStyle(fontSize: 12, color: assetProfitColor),
               ),
             ],
           ),
