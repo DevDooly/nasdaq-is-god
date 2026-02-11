@@ -58,8 +58,7 @@ class ApiService {
       final formData = FormData.fromMap({'username': username, 'password': password});
       final response = await _dio.post('/login', data: formData, options: Options(contentType: Headers.formUrlEncodedContentType));
       if (response.statusCode == 200 && response.data != null) {
-        final data = response.data;
-        final token = data['access_token'];
+        final token = response.data['access_token'];
         if (token != null) {
           _backupToken = token;
           if (kIsWeb) { try { html.window.localStorage['jwt_token'] = token; } catch (e) {} }
@@ -68,9 +67,7 @@ class ApiService {
         }
       }
       return null;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   Future<void> logout() async {
@@ -79,143 +76,115 @@ class ApiService {
     try { await _storage.delete(key: 'jwt_token'); } catch (e) {}
   }
 
+  Future<bool> toggleMasterAutoTrading() async {
+    try {
+      final response = await _dio.patch('/users/me/auto-trading');
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
+  Future<Map<String, dynamic>?> liquidatePositions(List<String> symbols) async {
+    try {
+      final response = await _dio.post('/trade/liquidate', queryParameters: {'symbols': symbols});
+      return response.data;
+    } catch (e) { return null; }
+  }
+
   Stream getPriceStream() {
     try {
       final channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
       return channel.stream.map((event) => jsonDecode(event));
-    } catch (e) {
-      return const Stream.empty();
-    }
+    } catch (e) { return const Stream.empty(); }
   }
 
   Future<Map<String, dynamic>?> getMe() async {
     try {
       final response = await _dio.get('/users/me');
       return response.data;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   Future<Map<String, dynamic>?> getPortfolio() async {
     try {
       final response = await _dio.get('/portfolio');
       return response.data;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   Future<List<dynamic>?> getPortfolioHistory() async {
     try {
       final response = await _dio.get('/portfolio/history');
       return response.data;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   Future<List<dynamic>?> getTradeHistory() async {
     try {
       final response = await _dio.get('/trade/history');
       return response.data;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   Future<Map<String, dynamic>?> getIndicators(String symbol) async {
     try {
       final response = await _dio.get('/stock/$symbol/indicators');
       return response.data;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
-    Future<Map<String, dynamic>?> getStockSentiment(String symbol) async {
+  Future<Map<String, dynamic>?> getStockSentiment(String symbol) async {
+    try {
+      final response = await _dio.get('/stock/$symbol/sentiment');
+      return response.data;
+    } catch (e) { return null; }
+  }
 
-      try {
+  Future<Map<String, dynamic>?> getMarketSentiment() async {
+    try {
+      final response = await _dio.get('/market/sentiment');
+      return response.data;
+    } catch (e) { return null; }
+  }
 
-        final response = await _dio.get('/stock/$symbol/sentiment');
-
-        return response.data;
-
-      } catch (e) { return null; }
-
-    }
-
-  
-
-    // 💡 시장 전체 심리 분석
-
-    Future<Map<String, dynamic>?> getMarketSentiment() async {
-
-      try {
-
-        final response = await _dio.get('/market/sentiment');
-
-        return response.data;
-
-      } catch (e) { return null; }
-
-    }
-
-  
-
-    Future<Map<String, dynamic>?> searchStock(String query) async {
-
-  
+  Future<Map<String, dynamic>?> searchStock(String query) async {
     try {
       final response = await _dio.get('/search', queryParameters: {'q': query});
       return response.data;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   Future<Map<String, dynamic>?> placeOrder(String symbol, double quantity, String side) async {
     try {
       final response = await _dio.post('/trade/order', queryParameters: {'symbol': symbol, 'quantity': quantity, 'side': side});
       return response.data;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   Future<List<dynamic>?> getStrategies() async {
     try {
       final response = await _dio.get('/strategies');
       return response.data;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   Future<Map<String, dynamic>?> createStrategy(Map<String, dynamic> data) async {
     try {
       final response = await _dio.post('/strategies', data: data);
       return response.data;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   Future<bool> toggleStrategy(int id) async {
     try {
       final response = await _dio.patch('/strategies/$id/toggle');
       return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
 
   Future<bool> deleteStrategy(int id) async {
     try {
       final response = await _dio.delete('/strategies/$id');
       return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
 }

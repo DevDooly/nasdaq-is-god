@@ -65,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _apiService.getMe(),
       _apiService.getPortfolio(),
       _apiService.getPortfolioHistory(),
-      _apiService.getMarketSentiment(), // 💡 시장 분석 데이터 추가
+      _apiService.getMarketSentiment(),
     ]);
     
     if (mounted) {
@@ -92,20 +92,105 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isSearching = false);
     if (result != null && result['symbol'] != null && mounted) {
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: result['symbol']))).then((_) => _fetchData());
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('종목을 찾을 수 없습니다.')));
     }
+  }
+
+  // 💡 청산 모드 다이얼로그 (체크리스트 포함)
+  void _showLiquidationDialog() {
+    if (_portfolio == null || _portfolio!.isEmpty) return;
+
+    List<String> selectedSymbols = _portfolio!.map((e) => e.symbol).toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            title: const Text('⚠️ Portfolio Liquidation', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Select stocks to sell all positions immediately:', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton(
+                        onPressed: () => setDialogState(() => selectedSymbols = _portfolio!.map((e) => e.symbol).toList()),
+                        child: const Text('Select All'),
+                      ),
+                      TextButton(
+                        onPressed: () => setDialogState(() => selectedSymbols = []),
+                        child: const Text('Clear All'),
+                      ),
+                    ],
+                  ),
+                  const Divider(color: Colors.white10),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _portfolio!.length,
+                      itemBuilder: (context, index) {
+                        final asset = _portfolio![index];
+                        return CheckboxListTile(
+                          title: Text(asset.symbol, style: const TextStyle(color: Colors.white)),
+                          subtitle: Text('${asset.quantity} shares', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          value: selectedSymbols.contains(asset.symbol),
+                          onChanged: (val) {
+                            setDialogState(() {
+                              if (val == true) selectedSymbols.add(asset.symbol);
+                              else selectedSymbols.remove(asset.symbol);
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                onPressed: selectedSymbols.isEmpty ? null : () async {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⏳ Liquidating selected positions...')));
+                  await _apiService.liquidatePositions(selectedSymbols);
+                  _fetchData();
+                },
+                child: const Text('Confirm Sell', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    bool isAutoEnabled = _userInfo?['is_auto_trading_enabled'] ?? true;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nasdaq is God'),
         actions: [
+          // 💡 자동매매 마스터 스위치
+          IconButton(
+            icon: Icon(isAutoEnabled ? Icons.play_circle_fill : Icons.pause_circle_filled, 
+                 color: isAutoEnabled ? Colors.greenAccent : Colors.orangeAccent),
+            tooltip: 'Master Auto-Trading Switch',
+            onPressed: () async {
+              await _apiService.toggleMasterAutoTrading();
+              _fetchData();
+            },
+          ),
           IconButton(icon: const Icon(Icons.settings_suggest), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const StrategyScreen()))),
           IconButton(icon: const Icon(Icons.history), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TradeHistoryScreen()))),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchData),
           IconButton(icon: const Icon(Icons.logout), onPressed: () async { await _apiService.logout(); if (mounted) Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const LoginScreen())); }),
         ],
       ),
@@ -136,7 +221,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       _buildEquityChart(),
                       const SizedBox(height: 24),
                     ],
-                    const Text('My Portfolio', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('My Portfolio', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                        // 💡 청산 버튼
+                        TextButton.icon(
+                          onPressed: _showLiquidationDialog,
+                          icon: const Icon(Icons.exit_to_app, color: Colors.redAccent, size: 18),
+                          label: const Text('Liquidate', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 12),
                     _buildAssetList(),
                   ],
@@ -146,64 +242,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 💡 AI 시장 분석 카드
   Widget _buildMarketSentimentCard() {
     final score = _marketSentiment!['score'];
     final sentiment = _marketSentiment!['sentiment'];
     final summary = _marketSentiment!['summary'];
     final keywords = List<String>.from(_marketSentiment!['keywords'] ?? []);
-
     Color cardColor;
-    if (score >= 60) cardColor = Colors.green[900]!;
-    else if (score <= 40) cardColor = Colors.red[900]!;
-    else cardColor = Colors.blueGrey[800]!;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [cardColor.withOpacity(0.8), cardColor.withOpacity(0.4)]),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.psychology, color: Colors.white, size: 24),
-                  SizedBox(width: 8),
-                  Text('AI Market Briefing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)),
-                child: Text('$sentiment ($score/100)', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              )
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(summary, style: const TextStyle(color: Colors.white, fontSize: 14)),
-          if (keywords.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: keywords.map((k) => Chip(
-                label: Text('#$k', style: const TextStyle(fontSize: 11, color: Colors.white)),
-                backgroundColor: Colors.black26,
-                padding: EdgeInsets.zero,
-                labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-                visualDensity: VisualDensity.compact,
-              )).toList(),
-            )
-          ]
-        ],
-      ),
-    );
+    if (score >= 60) cardColor = Colors.green[900]!; else if (score <= 40) cardColor = Colors.red[900]!; else cardColor = Colors.blueGrey[800]!;
+    return Container(width: double.infinity, padding: const EdgeInsets.all(16), decoration: BoxDecoration(gradient: LinearGradient(colors: [cardColor.withOpacity(0.8), cardColor.withOpacity(0.4)]), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Row(children: [Icon(Icons.psychology, color: Colors.white, size: 24), SizedBox(width: 8), Text('AI Market Briefing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))]), Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)), child: Text('$sentiment ($score/100)', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))]), const SizedBox(height: 12), Text(summary, style: const TextStyle(color: Colors.white, fontSize: 14)), if (keywords.isNotEmpty) ...[const SizedBox(height: 12), Wrap(spacing: 8, children: keywords.map((k) => Chip(label: Text('#$k', style: const TextStyle(fontSize: 11, color: Colors.white)), backgroundColor: Colors.black26, padding: EdgeInsets.zero, labelPadding: const EdgeInsets.symmetric(horizontal: 8), visualDensity: VisualDensity.compact)).toList())]]));
   }
 
   Widget _buildHeader() {
@@ -239,15 +285,10 @@ class _HomeScreenState extends State<HomeScreen> {
     double profitRate = (_summary!['total_profit_rate'] ?? 0).toDouble();
     double cash = (_summary!['cash_balance'] ?? 0).toDouble();
     final profitColor = totalProfit >= 0 ? Colors.greenAccent : Colors.redAccent;
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[900]!], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
+      decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.blue[700]!, Colors.blue[900]!], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Total Net Worth (Cash + Stocks)', style: TextStyle(color: Colors.white70, fontSize: 14)),
         Text('\$${NumberFormat('#,##0.00').format(totalEquity)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
@@ -268,32 +309,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildEquityChart() {
     List<FlSpot> spots = [];
-    for (int i = 0; i < _equityHistory!.length; i++) {
-      spots.add(FlSpot(i.toDouble(), (_equityHistory![i]['total_equity'] as num).toDouble()));
-    }
-
-    return Container(
-      height: 150,
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: LineChart(
-        LineChartData(
-          gridData: const FlGridData(show: false),
-          titlesData: const FlTitlesData(show: false),
-          borderData: FlBorderData(show: false),
-          lineBarsData: [
-            LineChartBarData(
-              spots: spots,
-              isCurved: true,
-              color: Colors.greenAccent,
-              barWidth: 2,
-              dotData: const FlDotData(show: false),
-              belowBarData: BarAreaData(show: true, color: Colors.greenAccent.withOpacity(0.05)),
-            ),
-          ],
-        ),
-      ),
-    );
+    for (int i = 0; i < _equityHistory!.length; i++) { spots.add(FlSpot(i.toDouble(), (_equityHistory![i]['total_equity'] as num).toDouble())); }
+    return Container(height: 150, width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 8), child: LineChart(LineChartData(gridData: const FlGridData(show: false), titlesData: const FlTitlesData(show: false), borderData: FlBorderData(show: false), lineBarsData: [LineChartBarData(spots: spots, isCurved: true, color: Colors.greenAccent, barWidth: 2, dotData: const FlDotData(show: false), belowBarData: BarAreaData(show: true, color: Colors.greenAccent.withOpacity(0.05)))])));
   }
 
   Widget _buildAssetList() {
