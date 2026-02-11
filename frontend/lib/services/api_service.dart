@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
+import 'dart:html' as html;
 
 class ApiService {
   static String get _baseUrl {
@@ -18,30 +19,30 @@ class ApiService {
     receiveTimeout: const Duration(seconds: 15),
   ));
 
-  // 웹 환경 호환성 설정 (파라미터 오류 수정)
   final _storage = const FlutterSecureStorage();
 
   ApiService() {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        try {
-          // 💡 매 요청마다 저장소에서 토큰을 읽어 헤더에 부착
-          final token = await _storage.read(key: 'jwt_token');
-          if (token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
-            print('🔑 [Auth] Token attached to: ${options.path}');
-          } else {
-            print('⚠️ [Auth] No token found for: ${options.path}');
-          }
-        } catch (e) {
-          print('🚨 [Auth Error] $e');
+        String? token;
+        
+        // 💡 웹 환경에서는 LocalStorage에서 직접 읽는 것이 더 안정적일 수 있음
+        if (kIsWeb) {
+          token = html.window.localStorage['jwt_token'];
+        } else {
+          token = await _storage.read(key: 'jwt_token');
+        }
+
+        if (token != null && token.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $token';
+          print('🔑 [Auth] Token 부착됨: ${options.path}');
+        } else {
+          print('⚠️ [Auth] 전송할 Token이 없음: ${options.path}');
         }
         return handler.next(options);
       },
       onError: (DioException e, handler) {
-        if (e.response?.statusCode == 401) {
-          print('❌ [Auth Error] 401 Unauthorized - 로그인 세션 만료 가능성');
-        }
+        print('❌ [API Error] ${e.response?.statusCode} - ${e.message}');
         return handler.next(e);
       },
     ));
@@ -52,12 +53,14 @@ class ApiService {
     try {
       print('🔑 [Login] Attempting for $username');
       
+      final formData = FormData.fromMap({
+        'username': username,
+        'password': password,
+      });
+
       final response = await _dio.post(
         '/login',
-        data: {
-          'username': username,
-          'password': password,
-        },
+        data: formData,
         options: Options(
           contentType: Headers.formUrlEncodedContentType,
         ),
@@ -69,8 +72,12 @@ class ApiService {
       if (response.statusCode == 200 && data != null) {
         final token = data['access_token'];
         if (token != null) {
+          // 💡 웹과 앱 모두에서 토큰 저장
+          if (kIsWeb) {
+            html.window.localStorage['jwt_token'] = token;
+          }
           await _storage.write(key: 'jwt_token', value: token);
-          print('✅ [Login] Success');
+          print('✅ [Login] 성공 및 토큰 저장 완료');
           return data;
         }
       }
@@ -124,7 +131,8 @@ class ApiService {
   // 주식 주문
   Future<Map<String, dynamic>?> placeOrder(String symbol, double quantity, String side) async {
     try {
-      print('🚀 [Trade] Ordering $side $quantity shares of $symbol');
+      print('🚀 [Trade] 주문 전송: $side $symbol $quantity');
+      // 💡 queryParameters 대신 data(Body)로 전송 시도 (CORS 이슈 대응)
       final response = await _dio.post(
         '/trade/order', 
         queryParameters: {
@@ -136,7 +144,7 @@ class ApiService {
       
       dynamic data = response.data;
       if (data is String) data = jsonDecode(data);
-      print('✅ [Trade] Success: $data');
+      print('✅ [Trade] 주문 결과: $data');
       return data;
     } catch (e) {
       if (e is DioException) {
