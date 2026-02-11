@@ -18,15 +18,17 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   final ApiService _apiService = ApiService();
   IndicatorData? _data;
   Map<String, dynamic>? _sentiment;
+  List<dynamic>? _aiModels;
+  String _selectedModel = 'models/gemini-2.0-flash';
   double _heldQuantity = 0;
   bool _isLoading = true;
-  bool _isSentimentLoading = true;
+  bool _isSentimentLoading = false;
 
   @override
   void initState() {
     super.initState();
     _fetchInitialData();
-    _fetchSentiment();
+    _fetchModels();
   }
 
   Future<void> _fetchInitialData() async {
@@ -34,6 +36,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     final results = await Future.wait([
       _apiService.getIndicators(widget.symbol),
       _apiService.getPortfolio(),
+      _apiService.getStockSentiment(widget.symbol), // 💡 히스토리 우선 조회
     ]);
 
     if (mounted) {
@@ -44,14 +47,32 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
           final currentAsset = assets.map((i) => StockAsset.fromJson(i)).cast<StockAsset?>().firstWhere((a) => a?.symbol == widget.symbol, orElse: () => null);
           _heldQuantity = currentAsset?.quantity ?? 0;
         }
+        _sentiment = results[2] as Map<String, dynamic>?;
         _isLoading = false;
       });
     }
   }
 
-  Future<void> _fetchSentiment() async {
+  Future<void> _fetchModels() async {
+    final models = await _apiService.getAiModels();
+    if (models != null && mounted) {
+      setState(() {
+        _aiModels = models;
+        // 기본 모델이 리스트에 있으면 유지, 없으면 첫 번째 선택
+        if (!models.any((m) => m['name'] == _selectedModel)) {
+          _selectedModel = models.first['name'];
+        }
+      });
+    }
+  }
+
+  Future<void> _runAnalysis({bool force = true}) async {
     setState(() => _isSentimentLoading = true);
-    final result = await _apiService.getStockSentiment(widget.symbol);
+    final result = await _apiService.getStockSentiment(
+      widget.symbol, 
+      model: _selectedModel,
+      force: force
+    );
     if (mounted) {
       setState(() {
         _sentiment = result;
@@ -71,7 +92,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : RefreshIndicator(
-                onRefresh: () => Future.wait([_fetchInitialData(), _fetchSentiment()]),
+                onRefresh: _fetchInitialData,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(16),
@@ -80,7 +101,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                     children: [
                       _buildPriceHeader(),
                       const SizedBox(height: 24),
-                      _buildAISentimentCard(),
+                      _buildAISentimentSection(),
                       const SizedBox(height: 24),
                       _buildChartCard('Price History', _buildPriceChart()),
                       const SizedBox(height: 24),
@@ -98,53 +119,135 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     );
   }
 
-  Widget _buildAISentimentCard() {
+  Widget _buildAISentimentSection() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.purple[900]!.withOpacity(0.5), Colors.blue[900]!.withOpacity(0.5)]),
+        color: Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.purpleAccent.withOpacity(0.3)),
+        border: Border.all(color: Colors.purpleAccent.withOpacity(0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.auto_awesome, color: Colors.purpleAccent, size: 20),
-              SizedBox(width: 8),
-              Text('Gemini AI Market Sentiment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              const Row(
+                children: [
+                  Icon(Icons.auto_awesome, color: Colors.purpleAccent, size: 20),
+                  SizedBox(width: 8),
+                  Text('AI Analysis', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              if (_aiModels != null)
+                DropdownButton<String>(
+                  value: _selectedModel,
+                  dropdownColor: const Color(0xFF1E293B),
+                  underline: const SizedBox(),
+                  style: const TextStyle(fontSize: 12, color: Colors.purpleAccent),
+                  onChanged: (String? newValue) {
+                    if (newValue != null) setState(() => _selectedModel = newValue);
+                  },
+                  items: _aiModels!.map<DropdownMenuItem<String>>((dynamic model) {
+                    return DropdownMenuItem<String>(
+                      value: model['name'],
+                      child: Text(model['display_name']),
+                    );
+                  }).toList(),
+                ),
             ],
           ),
           const SizedBox(height: 16),
           if (_isSentimentLoading)
-            const Center(child: LinearProgressIndicator())
-          else if (_sentiment == null || _sentiment!['error'] != null)
-            const Text('Sentiment analysis currently unavailable', style: TextStyle(color: Colors.grey))
+            const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+          else if (_sentiment == null)
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: () => _runAnalysis(force: false),
+                icon: const Icon(Icons.psychology),
+                label: const Text('Run AI Analysis'),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700]),
+              ),
+            )
           else ...[
+            _buildSentimentResult(),
+            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${_sentiment!['score']}/100', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
-                    Text(_sentiment!['sentiment'], style: TextStyle(color: _getSentimentColor(_sentiment!['sentiment']), fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 20),
-                    child: Text(_sentiment!['summary'], style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                if (_sentiment!['timestamp'] != null)
+                  Text(
+                    'Analyzed at: ${DateFormat('MM/dd HH:mm').format(DateTime.parse(_sentiment!['timestamp']))}',
+                    style: const TextStyle(color: Colors.grey, fontSize: 11),
                   ),
+                TextButton(
+                  onPressed: () => _runAnalysis(force: true),
+                  child: const Text('Refresh Analysis', style: TextStyle(fontSize: 12, color: Colors.purpleAccent)),
                 ),
               ],
             ),
-            const Divider(height: 24, color: Colors.white10),
-            Text(_sentiment!['reason'] ?? '', style: const TextStyle(color: Colors.grey, fontSize: 12)),
           ]
         ],
+      ),
+    );
+  }
+
+  Widget _buildSentimentResult() {
+    final score = _sentiment!['score'] ?? 50;
+    final sentiment = _sentiment!['sentiment'] ?? 'Neutral';
+    final summary = _sentiment!['summary'] ?? '';
+    final reason = _sentiment!['reason'] ?? '';
+    final sources = _sentiment!['sources'] as List? ?? [];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('$score/100', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+            const SizedBox(width: 12),
+            Text(sentiment, style: TextStyle(color: _getSentimentColor(sentiment), fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(summary, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 12),
+        Text(reason, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        if (sources.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          InkWell(
+            onTap: () => _showSourcesDialog(sources),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, size: 14, color: Colors.blueAccent),
+                const SizedBox(width: 4),
+                Text('Based on ${sources.length} news sources', style: const TextStyle(color: Colors.blueAccent, fontSize: 12, decoration: TextDecoration.underline)),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _showSourcesDialog(List sources) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('Analysis Sources', style: TextStyle(color: Colors.white)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: sources.length,
+            separatorBuilder: (context, index) => const Divider(color: Colors.white10),
+            itemBuilder: (context, index) => Text('- ${sources[index]}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
       ),
     );
   }
@@ -156,6 +259,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   }
 
   Widget _buildPriceHeader() {
+    if (_data == null) return const SizedBox();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(widget.symbol, style: const TextStyle(fontSize: 14, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
       Text('\$${_data?.price.toStringAsFixed(2)}', style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white)),

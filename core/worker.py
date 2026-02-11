@@ -5,8 +5,6 @@ from core.database import engine
 from core.models import TradingStrategy, User
 from core.strategy_service import StrategyService
 from core.trade_service import TradeService
-from core.indicator_service import IndicatorService
-from core.mock_broker import MockBroker
 from bot.config import logger
 from sqlalchemy.orm import sessionmaker
 
@@ -21,7 +19,22 @@ class TradingWorker:
         async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         
         async with async_session() as session:
-            # 1. 활성화된 전략 목록 가져오기
+            # 1. 모든 사용자 정보 가져오기 (마스터 스위치 확인용)
+            users_statement = select(User)
+            users_result = await session.execute(users_statement)
+            all_users = users_result.scalars().all()
+            
+            # 💡 각 사용자별 마스터 스위치 상태 맵 생성
+            user_switch_map = {user.id: user.is_auto_trading_enabled for user in all_users}
+
+            # 2. 자산 스냅샷 기록
+            for user in all_users:
+                try:
+                    await self.trade_service.record_equity_snapshot(session, user)
+                except Exception as e:
+                    logger.error(f"Failed to save snapshot for {user.username}: {e}")
+
+            # 3. 활성화된 전략 목록 가져오기
             statement = select(TradingStrategy).where(TradingStrategy.is_active == True)
             result = await session.execute(statement)
             active_strategies = result.scalars().all()
@@ -30,31 +43,23 @@ class TradingWorker:
 
             for strategy in active_strategies:
                 try:
-                    # 2. 전략 평가
+                    # 💡 [핵심] 마스터 스위치가 꺼져있으면 해당 사용자의 전략 건너뜀
+                    if not user_switch_map.get(strategy.user_id, True):
+                        logger.info(f"⏸️ Skipping strategy {strategy.name} (User auto-trading DISABLED)")
+                        continue
+
+                    # 전략 평가 및 매매 실행
                     action = await self.strategy_service.evaluate_strategy(strategy)
-                    
                     if action in ["BUY", "SELL"]:
-                        logger.info(f"🚩 Strategy Match! {strategy.name} ({strategy.symbol}) -> {action}")
-                        
-                        # 3. 사용자 정보 가져오기
-                        user_statement = select(User).where(User.id == strategy.user_id)
-                        user_result = await session.execute(user_statement)
-                        user = user_result.scalar_one_or_none()
-                        
+                        user = next((u for u in all_users if u.id == strategy.user_id), None)
                         if user:
-                            # 4. 매매 실행 (기본 1주 예시)
-                            # 실제로는 전략 파라미터에 수량을 넣어야 함
-                            await self.trade_service.execute_trade(
-                                session, user, strategy.symbol, 1.0, action
-                            )
+                            await self.trade_service.execute_trade(session, user, strategy.symbol, 1.0, action)
                             logger.info(f"✅ Auto-Trade Executed: {action} {strategy.symbol}")
                 
                 except Exception as e:
                     logger.error(f"Error processing strategy {strategy.id}: {e}")
 
     async def start(self, interval_seconds: int = 60):
-        """주기적으로 워커 실행"""
-        logger.info(f"Starting Trading Worker (Interval: {interval_seconds}s)...")
         self.is_running = True
         while self.is_running:
             await self.run_once()
@@ -62,4 +67,3 @@ class TradingWorker:
 
     def stop(self):
         self.is_running = False
-        logger.info("Trading Worker Stopped.")

@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from core.models import User, StockAsset, TradeLog
+from core.models import User, StockAsset, TradeLog, EquitySnapshot
 from core.broker import TradingBroker
 from core.stock_service import get_stock_info
 from bot.config import logger
@@ -21,12 +21,10 @@ class TradeService:
     ):
         """매매 실행 및 DB 업데이트 (잔고 체크 + 로그 기록 + 자산 업데이트)"""
         
-        # 💡 최신 사용자 정보 가져오기 (잔고 확인용)
         statement = select(User).where(User.id == user.id)
         result = await session.execute(statement)
         db_user = result.scalar_one()
 
-        # 1. 브로커를 통한 실제 주가 조회 (Mock인 경우에도 실제가 사용)
         stock_data = await get_stock_info(symbol)
         if "error" in stock_data:
             return {"error": f"Failed to fetch price for {symbol}"}
@@ -34,21 +32,17 @@ class TradeService:
         current_price = stock_data["currentPrice"]
         total_amount = current_price * quantity
 
-        # 2. 잔고 확인 (매수 시)
         if side.upper() == "BUY":
             if db_user.cash_balance < total_amount:
                 return {"error": f"Insufficient balance. Required: ${total_amount:.2f}, Available: ${db_user.cash_balance:.2f}"}
             
-            # 실제 주문 실행 (브로커)
             order_result = await self.broker.place_order(symbol, quantity, side, price=current_price)
             if order_result.get("status") != "filled":
                 return {"error": "Order execution failed"}
             
-            # 잔고 차감
             db_user.cash_balance -= total_amount
 
         elif side.upper() == "SELL":
-            # 보유 수량 확인
             asset_statement = select(StockAsset).where(StockAsset.user_id == user.id, StockAsset.symbol == symbol)
             asset_result = await session.execute(asset_statement)
             asset = asset_result.scalar_one_or_none()
@@ -56,15 +50,12 @@ class TradeService:
             if not asset or asset.quantity < quantity:
                 return {"error": "Insufficient stock quantity"}
 
-            # 실제 주문 실행
             order_result = await self.broker.place_order(symbol, quantity, side, price=current_price)
             if order_result.get("status") != "filled":
                 return {"error": "Order execution failed"}
 
-            # 잔고 가산
             db_user.cash_balance += total_amount
 
-        # 3. 거래 로그 기록 (TradeLog)
         trade_log = TradeLog(
             user_id=user.id,
             symbol=symbol,
@@ -77,7 +68,6 @@ class TradeService:
         session.add(trade_log)
         session.add(db_user)
 
-        # 4. 사용자 자산 업데이트 (StockAsset)
         asset_statement = select(StockAsset).where(
             StockAsset.user_id == user.id, 
             StockAsset.symbol == symbol
@@ -121,12 +111,10 @@ class TradeService:
 
     async def get_user_portfolio(self, session: AsyncSession, user: User):
         """사용자의 전체 포트폴리오 및 요약 정보 조회 (수익률 포함)"""
-        # 최신 사용자 정보
         user_statement = select(User).where(User.id == user.id)
         user_result = await session.execute(user_statement)
         db_user = user_result.scalar_one()
 
-        # 자산 목록
         asset_statement = select(StockAsset).where(StockAsset.user_id == user.id)
         asset_result = await session.execute(asset_statement)
         assets = asset_result.scalars().all()
@@ -134,7 +122,6 @@ class TradeService:
         total_market_value = 0.0
         total_unrealized_profit = 0.0
         
-        # 각 자산의 현재가 조회 및 수익 계산
         async def enrich_asset(asset):
             stock_data = await get_stock_info(asset.symbol)
             current_price = stock_data.get("currentPrice", asset.average_price)
@@ -155,9 +142,7 @@ class TradeService:
             total_market_value += market_val
             total_unrealized_profit += profit
 
-        # 💡 최종 수익률 계산 로직
-        # 원금(Initial Balance) 대비 (현재 잔고 + 현재 주식 가치)
-        initial_balance = 100000.0 # 기본 설정값
+        initial_balance = 100000.0
         current_total_equity = db_user.cash_balance + total_market_value
         total_profit = current_total_equity - initial_balance
         total_profit_rate = (total_profit / initial_balance) * 100
@@ -179,3 +164,19 @@ class TradeService:
         result = await session.execute(statement)
         logs = result.scalars().all()
         return logs
+
+    async def record_equity_snapshot(self, session: AsyncSession, user: User):
+        """현재 총 자산(현금+주식) 상태를 기록합니다."""
+        portfolio = await self.get_user_portfolio(session, user)
+        total_equity = portfolio["summary"]["total_equity"]
+        
+        snapshot = EquitySnapshot(user_id=user.id, total_equity=total_equity)
+        session.add(snapshot)
+        await session.commit()
+        logger.info(f"💾 Saved equity snapshot for {user.username}: ${total_equity:.2f}")
+
+    async def get_equity_history(self, session: AsyncSession, user: User):
+        """사용자의 자산 변화 이력을 조회합니다."""
+        statement = select(EquitySnapshot).where(EquitySnapshot.user_id == user.id).order_by(EquitySnapshot.timestamp.asc())
+        result = await session.execute(statement)
+        return result.scalars().all()

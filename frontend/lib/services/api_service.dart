@@ -132,9 +132,16 @@ class ApiService {
     } catch (e) { return null; }
   }
 
-  Future<Map<String, dynamic>?> getStockSentiment(String symbol) async {
+  Future<List<dynamic>?> getAiModels() async {
     try {
-      final response = await _dio.get('/stock/$symbol/sentiment');
+      final response = await _dio.get('/ai/models');
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<Map<String, dynamic>?> getStockSentiment(String symbol, {String? model, bool force = false}) async {
+    try {
+      final response = await _dio.get('/stock/$symbol/sentiment', queryParameters: {if (model != null) 'model': model, 'force_refresh': force});
       return response.data;
     } catch (e) { return null; }
   }
