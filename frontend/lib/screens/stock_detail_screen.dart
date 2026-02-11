@@ -142,14 +142,20 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     if (_data == null) return const SizedBox();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('MARKET PRICE', style: TextStyle(color: Colors.cyanAccent.withOpacity(0.5), fontSize: 12, letterSpacing: 2)),
-      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        Text('\$${_data?.price.toStringAsFixed(2)}', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.white)),
-        const SizedBox(width: 16),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: _buildRSIBadge(),
-        )
-      ]),
+      const SizedBox(height: 4),
+      Wrap(
+        crossAxisAlignment: WrapCrossAlignment.end,
+        spacing: 16,
+        runSpacing: 8,
+        children: [
+          Text('\$${_data?.price.toStringAsFixed(2)}', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.white)),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _buildRSIBadge(),
+          )
+        ],
+      ),
+      const SizedBox(height: 8),
       Text('TS: ${DateFormat('MM/dd HH:mm:ss').format(DateTime.parse(_data!.timestamp))}', style: const TextStyle(fontSize: 11, color: Colors.grey, fontFamily: 'monospace')),
     ]);
   }
@@ -174,10 +180,14 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text('AI QUANT ADVISOR', style: TextStyle(color: Colors.purpleAccent, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
-            if (_aiModels != null) _buildModelPicker(),
-          ]),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const Text('AI QUANT ADVISOR', style: TextStyle(color: Colors.purpleAccent, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              if (_aiModels != null) _buildModelPicker(),
+            ],
+          ),
           const SizedBox(height: 24),
           if (_isSentimentLoading)
             const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Colors.purpleAccent)))
@@ -298,19 +308,56 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   }
 
   Widget _buildTradeActionRow() {
+    final bool isMobile = MediaQuery.of(context).size.width < 600;
+    
+    final holdingsInfo = Column(
+      crossAxisAlignment: isMobile ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      children: [
+        const Text('CURRENT HOLDINGS', style: TextStyle(color: Colors.grey, fontSize: 11)),
+        Text('${_heldQuantity.toStringAsFixed(2)} SHARES', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+      ],
+    );
+
+    final actionButtons = [
+      ElevatedButton(
+        onPressed: () => _showOrderDialog('BUY'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.greenAccent[700],
+          minimumSize: isMobile ? const Size(double.infinity, 48) : null,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        ),
+        child: const Text('EXECUTE BUY', style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+      if (isMobile) const SizedBox(height: 12) else const SizedBox(width: 12),
+      ElevatedButton(
+        onPressed: () => _showOrderDialog('SELL'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.redAccent[700],
+          minimumSize: isMobile ? const Size(double.infinity, 48) : null,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        ),
+        child: const Text('EXECUTE SELL', style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+    ];
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: _glassDecoration(color: Colors.blueAccent.withOpacity(0.05)),
-      child: Row(children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('CURRENT HOLDINGS', style: TextStyle(color: Colors.grey, fontSize: 11)),
-          Text('${_heldQuantity.toStringAsFixed(2)} SHARES', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-        ]),
-        const Spacer(),
-        ElevatedButton(onPressed: () => _showOrderDialog('BUY'), style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent[700]), child: const Text('EXECUTE BUY')),
-        const SizedBox(width: 12),
-        ElevatedButton(onPressed: () => _showOrderDialog('SELL'), style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent[700]), child: const Text('EXECUTE SELL')),
-      ]),
+      child: isMobile
+          ? Column(
+              children: [
+                holdingsInfo,
+                const SizedBox(height: 24),
+                ...actionButtons,
+              ],
+            )
+          : Row(
+              children: [
+                holdingsInfo,
+                const Spacer(),
+                ...actionButtons,
+              ],
+            ),
     );
   }
 

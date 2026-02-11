@@ -34,41 +34,44 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
       body: Center(
-        child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(40),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.02),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 40)],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.auto_graph, color: Colors.cyanAccent, size: 64),
-              const SizedBox(height: 24),
-              const Text('NASDAQ IS GOD', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 4)),
-              const Text('QUANT TERMINAL v2.0', style: TextStyle(fontSize: 10, color: Colors.grey, letterSpacing: 2)),
-              const SizedBox(height: 48),
-              _buildField('IDENTITY', _usernameController, false),
-              const SizedBox(height: 24),
-              _buildField('ACCESS KEY', _passwordController, true),
-              const SizedBox(height: 48),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _handleLogin,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.cyanAccent[700],
-                    padding: const EdgeInsets.all(20),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            padding: const EdgeInsets.all(40),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.02),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withOpacity(0.05)),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 40)],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.auto_graph, color: Colors.cyanAccent, size: 64),
+                const SizedBox(height: 24),
+                const Text('NASDAQ IS GOD', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 4)),
+                const Text('QUANT TERMINAL v2.0', style: TextStyle(fontSize: 10, color: Colors.grey, letterSpacing: 2)),
+                const SizedBox(height: 48),
+                _buildField('IDENTITY', _usernameController, false),
+                const SizedBox(height: 24),
+                _buildField('ACCESS KEY', _passwordController, true),
+                const SizedBox(height: 48),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _handleLogin,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.cyanAccent[700],
+                      padding: const EdgeInsets.all(20),
+                    ),
+                    child: _isLoading 
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('AUTHORIZE ACCESS', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
                   ),
-                  child: _isLoading 
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('AUTHORIZE ACCESS', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
