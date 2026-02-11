@@ -3,7 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
   final Dio _dio = Dio(BaseOptions(
-    baseUrl: 'http://localhost:8000', // 로컬 개발 시 백엔드 주소 (에뮬레이터 사용 시 10.0.2.2 등 조정 필요)
+    baseUrl: 'http://localhost:8001', // Changed to 8001 to avoid conflict
     connectTimeout: const Duration(seconds: 5),
     receiveTimeout: const Duration(seconds: 3),
   ));

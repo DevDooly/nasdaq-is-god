@@ -24,7 +24,7 @@ pip install -r requirements.txt
 # 서버 실행
 python3 main_api.py
 ```
-- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs) 접속 가능
+- **Swagger UI**: [http://localhost:8001/docs](http://localhost:8001/docs) 접속 가능
 
 ### Step 3: 프론트엔드 웹 실행 (Flutter)
 ```bash
@@ -55,11 +55,11 @@ ps aux | grep main.py | grep -v grep
 
 ### 포트 점유 확인
 ```bash
-# 8000 포트 (FastAPI)
-netstat -tulpn | grep 8000
+# 8001 포트 (FastAPI)
+netstat -tulpn | grep 8001
 ```
 
 ## 4. 트러블슈팅
 - **DB 연결 실패**: `.env`의 `DATABASE_URL`이 `localhost:5432`인지 확인하세요.
-- **포트 충돌**: 8000 포트가 이미 사용 중이라면 `main_api.py`의 `uvicorn.run(port=8000)`을 변경하세요.
+- **포트 충돌**: 8001 포트가 이미 사용 중이라면 `main_api.py`의 `uvicorn.run(port=8001)`을 변경하세요.
 - **Flutter 실행 불가**: `flutter doctor`를 실행하여 환경 설정을 점검하세요.
