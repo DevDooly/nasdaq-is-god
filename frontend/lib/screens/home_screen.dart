@@ -4,6 +4,7 @@ import '../models/asset.dart';
 import 'stock_detail_screen.dart';
 import 'trade_history_screen.dart';
 import 'strategy_screen.dart';
+import 'settings_screen.dart';
 import 'login_screen.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
@@ -171,6 +172,11 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Nasdaq is God'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, size: 20),
+            tooltip: 'Settings',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SettingsScreen())).then((_) => _fetchData()),
+          ),
           IconButton(
             icon: Icon(isAutoEnabled ? Icons.play_circle_fill : Icons.pause_circle_filled, color: isAutoEnabled ? Colors.greenAccent : Colors.orangeAccent),
             tooltip: 'Master Auto-Trading Switch',

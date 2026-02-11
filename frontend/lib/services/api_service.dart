@@ -76,6 +76,58 @@ class ApiService {
     try { await _storage.delete(key: 'jwt_token'); } catch (e) {}
   }
 
+  // 💡 API 키 관리
+  Future<List<dynamic>?> getApiKeys() async {
+    try {
+      final response = await _dio.get('/settings/api-keys');
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<bool> addApiKey(String label, String key) async {
+    try {
+      final response = await _dio.post('/settings/api-keys', queryParameters: {'label': label, 'key': key});
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
+  Future<bool> activateApiKey(int id) async {
+    try {
+      final response = await _dio.patch('/settings/api-keys/$id/activate');
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
+  Future<bool> deleteApiKey(int id) async {
+    try {
+      final response = await _dio.delete('/settings/api-keys/$id');
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
+  // 💡 AI 서비스 관련
+  Future<List<dynamic>?> getAiModels() async {
+    try {
+      final response = await _dio.get('/ai/models');
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<Map<String, dynamic>?> getStockSentiment(String symbol, {String? model, bool force = false}) async {
+    try {
+      final response = await _dio.get('/stock/$symbol/sentiment', queryParameters: {if (model != null) 'model': model, 'force_refresh': force});
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<Map<String, dynamic>?> getMarketSentiment() async {
+    try {
+      final response = await _dio.get('/market/sentiment');
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  // 💡 트레이딩 제어
   Future<bool> toggleMasterAutoTrading() async {
     try {
       final response = await _dio.patch('/users/me/auto-trading');
@@ -90,6 +142,36 @@ class ApiService {
     } catch (e) { return null; }
   }
 
+  // 💡 전략 관리
+  Future<List<dynamic>?> getStrategies() async {
+    try {
+      final response = await _dio.get('/strategies');
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<Map<String, dynamic>?> createStrategy(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post('/strategies', data: data);
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<bool> toggleStrategy(int id) async {
+    try {
+      final response = await _dio.patch('/strategies/$id/toggle');
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
+  Future<bool> deleteStrategy(int id) async {
+    try {
+      final response = await _dio.delete('/strategies/$id');
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
+  // 💡 시세 및 포트폴리오
   Stream getPriceStream() {
     try {
       final channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
@@ -132,27 +214,6 @@ class ApiService {
     } catch (e) { return null; }
   }
 
-  Future<List<dynamic>?> getAiModels() async {
-    try {
-      final response = await _dio.get('/ai/models');
-      return response.data;
-    } catch (e) { return null; }
-  }
-
-  Future<Map<String, dynamic>?> getStockSentiment(String symbol, {String? model, bool force = false}) async {
-    try {
-      final response = await _dio.get('/stock/$symbol/sentiment', queryParameters: {if (model != null) 'model': model, 'force_refresh': force});
-      return response.data;
-    } catch (e) { return null; }
-  }
-
-  Future<Map<String, dynamic>?> getMarketSentiment() async {
-    try {
-      final response = await _dio.get('/market/sentiment');
-      return response.data;
-    } catch (e) { return null; }
-  }
-
   Future<Map<String, dynamic>?> searchStock(String query) async {
     try {
       final response = await _dio.get('/search', queryParameters: {'q': query});
@@ -165,33 +226,5 @@ class ApiService {
       final response = await _dio.post('/trade/order', queryParameters: {'symbol': symbol, 'quantity': quantity, 'side': side});
       return response.data;
     } catch (e) { return null; }
-  }
-
-  Future<List<dynamic>?> getStrategies() async {
-    try {
-      final response = await _dio.get('/strategies');
-      return response.data;
-    } catch (e) { return null; }
-  }
-
-  Future<Map<String, dynamic>?> createStrategy(Map<String, dynamic> data) async {
-    try {
-      final response = await _dio.post('/strategies', data: data);
-      return response.data;
-    } catch (e) { return null; }
-  }
-
-  Future<bool> toggleStrategy(int id) async {
-    try {
-      final response = await _dio.patch('/strategies/$id/toggle');
-      return response.statusCode == 200;
-    } catch (e) { return false; }
-  }
-
-  Future<bool> deleteStrategy(int id) async {
-    try {
-      final response = await _dio.delete('/strategies/$id');
-      return response.statusCode == 200;
-    } catch (e) { return false; }
   }
 }

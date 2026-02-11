@@ -19,6 +19,7 @@ class User(UserBase, table=True):
     strategies: List["TradingStrategy"] = Relationship(back_populates="user")
     equity_history: List["EquitySnapshot"] = Relationship(back_populates="user")
     ai_histories: List["AISentimentHistory"] = Relationship(back_populates="user")
+    api_keys: List["APIKeyConfig"] = Relationship(back_populates="user")
 
 class UserCreate(UserBase):
     password: str
@@ -76,7 +77,6 @@ class EquitySnapshot(SQLModel, table=True):
 
     user: User = Relationship(back_populates="equity_history")
 
-# 💡 AI 분석 이력 테이블 추가
 class AISentimentHistory(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id")
@@ -85,11 +85,25 @@ class AISentimentHistory(SQLModel, table=True):
     sentiment: str
     summary: str
     reason: str
-    sources: str  # JSON string of news titles used
+    sources: str
     model_name: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
     user: User = Relationship(back_populates="ai_histories")
+
+# 💡 API 키 관리 테이블
+class APIKeyConfig(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id")
+    provider: str = Field(default="Gemini")
+    label: str
+    key_value: str # 실제 API 키 (저장 시 마스킹 또는 암호화 고려)
+    is_active: bool = Field(default=False)
+    usage_count: int = Field(default=0)
+    last_used_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    user: User = Relationship(back_populates="api_keys")
 
 class StrategyCreate(TradingStrategyBase):
     pass

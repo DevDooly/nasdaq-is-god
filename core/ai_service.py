@@ -3,26 +3,30 @@ import google.generativeai as genai
 import json
 import logging
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger("ai_service")
 
 class AIService:
     def __init__(self):
-        self.api_key = os.getenv("GEMINI_API_KEY")
-        if self.api_key and self.api_key != "your_gemini_api_key_here":
-            genai.configure(api_key=self.api_key)
-        else:
-            logger.warning("GEMINI_API_KEY not set. AI features will be limited.")
+        # 기본 키 (환경 변수)
+        self.default_api_key = os.getenv("GEMINI_API_KEY")
+        if self.default_api_key and self.default_api_key != "your_gemini_api_key_here":
+            genai.configure(api_key=self.default_api_key)
         
         self._market_cache = None
         self._market_cache_time = 0
         self.CACHE_DURATION = 1800 
 
-    def list_available_models(self) -> List[Dict[str, str]]:
+    def list_available_models(self, api_key: Optional[str] = None) -> List[Dict[str, str]]:
         """사용 가능한 Gemini 모델 리스트 반환"""
-        if not self.api_key: return []
+        key = api_key or self.default_api_key
+        if not key: return []
+        
         try:
+            # 전달받은 키가 있다면 해당 키로 재설정
+            if api_key: genai.configure(api_key=api_key)
+            
             models = []
             for m in genai.list_models():
                 if 'generateContent' in m.supported_generation_methods:
@@ -30,27 +34,30 @@ class AIService:
             return models
         except Exception as e:
             logger.error(f"Failed to list models: {e}")
-            # 지원 종료된 모델 대신 최신 모델 힌트 제공
-            return [{"name": "models/gemini-2.0-flash", "display_name": "Gemini 2.0 Flash (Stable)"}]
+            return [{"name": "models/gemini-2.0-flash", "display_name": "Gemini 2.0 Flash (Default)"}]
+        finally:
+            # 설정 복구 (다른 요청에 영향 주지 않기 위해)
+            if self.default_api_key: genai.configure(api_key=self.default_api_key)
 
-    async def analyze_sentiment(self, symbol: str, news_list: List[Dict[str, Any]], model_name: str = "models/gemini-2.0-flash") -> Dict[str, Any]:
+    async def analyze_sentiment(self, symbol: str, news_list: List[Dict[str, Any]], model_name: str = "models/gemini-2.0-flash", api_key: Optional[str] = None) -> Dict[str, Any]:
         """개별 종목 뉴스 분석"""
-        return await self._generate_analysis(f"주식 종목 '{symbol}'", news_list, model_name)
+        return await self._generate_analysis(f"주식 종목 '{symbol}'", news_list, model_name, api_key)
 
-    async def analyze_market_outlook(self, news_list: List[Dict[str, Any]], model_name: str = "models/gemini-2.0-flash") -> Dict[str, Any]:
+    async def analyze_market_outlook(self, news_list: List[Dict[str, Any]], model_name: str = "models/gemini-2.0-flash", api_key: Optional[str] = None) -> Dict[str, Any]:
         """전체 시장 뉴스 분석"""
         current_time = time.time()
         if self._market_cache and (current_time - self._market_cache_time < self.CACHE_DURATION):
             return self._market_cache
 
-        result = await self._generate_analysis("미국 주식 시장 전체(Nasdaq/S&P500)", news_list, model_name)
+        result = await self._generate_analysis("미국 주식 시장 전체(Nasdaq/S&P500)", news_list, model_name, api_key)
         if "error" not in result:
             self._market_cache = result
             self._market_cache_time = current_time
         return result
 
-    async def _generate_analysis(self, target_name: str, news_list: List[Dict[str, Any]], model_name: str) -> Dict[str, Any]:
-        if not self.api_key:
+    async def _generate_analysis(self, target_name: str, news_list: List[Dict[str, Any]], model_name: str, api_key: Optional[str] = None) -> Dict[str, Any]:
+        key = api_key or self.default_api_key
+        if not key:
             return {"error": "AI API Key not configured"}
         
         if not news_list:
@@ -85,6 +92,8 @@ class AIService:
 
         try:
             import asyncio
+            if api_key: genai.configure(api_key=api_key)
+            
             model = genai.GenerativeModel(model_name)
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(None, lambda: model.generate_content(prompt))
@@ -101,8 +110,8 @@ class AIService:
         except Exception as e:
             error_msg = str(e)
             if "429" in error_msg:
-                return {"error": "AI Quota Exceeded. Please try again in a few minutes."}
-            elif "404" in error_msg:
-                return {"error": f"Model {model_name} not found. Please select a different model."}
+                return {"error": "AI Quota Exceeded. Please try again or switch API Key."}
             logger.error(f"Gemini Error ({model_name}): {e}")
             return {"error": f"AI Error: {error_msg}"}
+        finally:
+            if api_key and self.default_api_key: genai.configure(api_key=self.default_api_key)
