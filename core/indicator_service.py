@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, List
-from core.stock_service import get_stock_info
+import yfinance as yf
 
 class IndicatorService:
     @staticmethod
@@ -16,7 +16,7 @@ class IndicatorService:
 
     @staticmethod
     def calculate_macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Dict[str, pd.Series]:
-        """MACD (Moving Average Convergence Divergence) 계산"""
+        """MACD 계산"""
         exp1 = series.ewm(span=fast, adjust=False).mean()
         exp2 = series.ewm(span=slow, adjust=False).mean()
         macd = exp1 - exp2
@@ -43,10 +43,8 @@ class IndicatorService:
             "lower": lower_band
         }
 
-    async def get_indicators(self, symbol: str, interval: str = "1d", period: str = "1mo") -> Dict[str, Any]:
-        """특정 종목의 기술적 지표들을 계산하여 반환"""
-        import yfinance as yf
-        
+    async def get_indicators(self, symbol: str, interval: str = "1d", period: str = "3mo") -> Dict[str, Any]:
+        """특정 종목의 기술적 지표 및 차트 데이터를 반환"""
         ticker = yf.Ticker(symbol)
         df = ticker.history(period=period, interval=interval)
         
@@ -60,11 +58,27 @@ class IndicatorService:
         macd_data = self.calculate_macd(close)
         bb_data = self.calculate_bollinger_bands(close)
         
-        # 최신 값 추출
+        # 차트용 데이터 리스트 생성 (마지막 30개 데이터 우선 반환)
+        history = []
+        plot_df = df.tail(60).copy() # 최근 60개 데이터 사용
+        plot_rsi = rsi.tail(60)
+        plot_macd = macd_data["macd"].tail(60)
+        plot_macd_hist = macd_data["histogram"].tail(60)
+        
+        for i in range(len(plot_df)):
+            idx = plot_df.index[i]
+            history.append({
+                "date": idx.strftime("%Y-%m-%d"),
+                "price": float(plot_df['Close'].iloc[i]),
+                "rsi": float(plot_rsi.iloc[i]) if not np.isnan(plot_rsi.iloc[i]) else None,
+                "macd": float(plot_macd.iloc[i]) if not np.isnan(plot_macd.iloc[i]) else None,
+                "macd_hist": float(plot_macd_hist.iloc[i]) if not np.isnan(plot_macd_hist.iloc[i]) else None,
+            })
+
         latest_idx = -1
         return {
             "symbol": symbol,
-            "price": float(close.iloc[latest_idx]),
+            "current_price": float(close.iloc[latest_idx]),
             "rsi": float(rsi.iloc[latest_idx]) if not np.isnan(rsi.iloc[latest_idx]) else None,
             "macd": {
                 "val": float(macd_data["macd"].iloc[latest_idx]),
@@ -76,5 +90,6 @@ class IndicatorService:
                 "middle": float(bb_data["middle"].iloc[latest_idx]),
                 "lower": float(bb_data["lower"].iloc[latest_idx])
             },
+            "history": history,
             "timestamp": df.index[latest_idx].isoformat()
         }

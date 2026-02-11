@@ -4,6 +4,7 @@ class IndicatorData {
   final double? rsi;
   final MacdData macd;
   final BollingerData bollinger;
+  final List<ChartPoint> history;
   final String timestamp;
 
   IndicatorData({
@@ -12,17 +13,46 @@ class IndicatorData {
     this.rsi,
     required this.macd,
     required this.bollinger,
+    required this.history,
     required this.timestamp,
   });
 
   factory IndicatorData.fromJson(Map<String, dynamic> json) {
+    var historyList = json['history'] as List;
     return IndicatorData(
       symbol: json['symbol'],
-      price: json['price'].toDouble(),
+      price: (json['current_price'] ?? json['price']).toDouble(),
       rsi: json['rsi']?.toDouble(),
       macd: MacdData.fromJson(json['macd']),
       bollinger: BollingerData.fromJson(json['bollinger']),
+      history: historyList.map((i) => ChartPoint.fromJson(i)).toList(),
       timestamp: json['timestamp'],
+    );
+  }
+}
+
+class ChartPoint {
+  final String date;
+  final double price;
+  final double? rsi;
+  final double? macd;
+  final double? macdHist;
+
+  ChartPoint({
+    required this.date,
+    required this.price,
+    this.rsi,
+    this.macd,
+    this.macdHist,
+  });
+
+  factory ChartPoint.fromJson(Map<String, dynamic> json) {
+    return ChartPoint(
+      date: json['date'],
+      price: json['price'].toDouble(),
+      rsi: json['rsi']?.toDouble(),
+      macd: json['macd']?.toDouble(),
+      macdHist: json['macd_hist']?.toDouble(),
     );
   }
 }
