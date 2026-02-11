@@ -36,7 +36,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     final results = await Future.wait([
       _apiService.getIndicators(widget.symbol),
       _apiService.getPortfolio(),
-      _apiService.getStockSentiment(widget.symbol), // 💡 히스토리 우선 조회
+      _apiService.getStockSentiment(widget.symbol),
     ]);
 
     if (mounted) {
@@ -58,7 +58,6 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     if (models != null && mounted) {
       setState(() {
         _aiModels = models;
-        // 기본 모델이 리스트에 있으면 유지, 없으면 첫 번째 선택
         if (!models.any((m) => m['name'] == _selectedModel)) {
           _selectedModel = models.first['name'];
         }
@@ -171,6 +170,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700]),
               ),
             )
+          else if (_sentiment!['error'] != null)
+            _buildErrorResult()
           else ...[
             _buildSentimentResult(),
             const SizedBox(height: 16),
@@ -191,6 +192,30 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
           ]
         ],
       ),
+    );
+  }
+
+  Widget _buildErrorResult() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 20),
+            SizedBox(width: 8),
+            Text('Analysis Failed', style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(_sentiment!['error'], style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        const SizedBox(height: 16),
+        Center(
+          child: ElevatedButton(
+            onPressed: () => _runAnalysis(force: true),
+            child: const Text('Retry Analysis'),
+          ),
+        )
+      ],
     );
   }
 

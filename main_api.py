@@ -103,7 +103,6 @@ async def get_stock_sentiment(
 ):
     """특정 종목의 AI 분석 정보를 가져옵니다. (이력 우선 조회)"""
     if not force_refresh:
-        # 1. 최근 1시간 이내의 이력이 있는지 확인
         statement = select(AISentimentHistory).where(
             AISentimentHistory.user_id == current_user.id,
             AISentimentHistory.symbol == symbol.upper()
@@ -123,14 +122,13 @@ async def get_stock_sentiment(
                 "is_history": True
             }
 
-    # 2. 이력이 없거나 강제 갱신인 경우 새로 분석
     news = await get_stock_news(symbol)
     analysis = await ai_service.analyze_sentiment(symbol, news, model_name=model)
     
+    # 💡 에러 발생 시 500 에러 대신 에러 객체 반환 (프론트엔드 대응)
     if "error" in analysis:
-        raise HTTPException(status_code=500, detail=analysis["error"])
+        return analysis
 
-    # 3. 분석 결과 저장
     db_history = AISentimentHistory(
         user_id=current_user.id,
         symbol=symbol.upper(),
@@ -176,6 +174,19 @@ async def place_trade_order(symbol: str, quantity: float, side: str, current_use
     if "error" in result: raise HTTPException(status_code=400, detail=result["error"])
     return result
 
+@app.post("/trade/liquidate")
+async def liquidate_positions(symbols: List[str] = Query(...), current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    results = []
+    for symbol in symbols:
+        asset_statement = select(StockAsset).where(StockAsset.user_id == current_user.id, StockAsset.symbol == symbol)
+        asset_result = await session.execute(asset_statement)
+        asset = asset_result.scalar_one_or_none()
+        if asset and asset.quantity > 0:
+            res = await trade_service.execute_trade(session, current_user, symbol, asset.quantity, "SELL")
+            results.append({"symbol": symbol, "status": "liquidated", "detail": res})
+        else: results.append({"symbol": symbol, "status": "skipped"})
+    return {"results": results}
+
 @app.get("/portfolio")
 async def get_portfolio(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     return await trade_service.get_user_portfolio(session, current_user)
@@ -210,6 +221,6 @@ async def delete_strategy(strategy_id: int, current_user: User = Depends(get_cur
     return {"status": "success"}
 
 @app.get("/")
-async def root(): return {"message": "Nasdaq is God API - AI History Ready"}
+async def root(): return {"message": "Nasdaq is God API - Stability Improved"}
 
 if __name__ == "__main__": uvicorn.run(app, host="0.0.0.0", port=9000)

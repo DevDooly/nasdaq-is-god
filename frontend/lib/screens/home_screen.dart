@@ -92,15 +92,14 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isSearching = false);
     if (result != null && result['symbol'] != null && mounted) {
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: result['symbol']))).then((_) => _fetchData());
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('종목을 찾을 수 없습니다.')));
     }
   }
 
-  // 💡 청산 모드 다이얼로그 (체크리스트 포함)
   void _showLiquidationDialog() {
     if (_portfolio == null || _portfolio!.isEmpty) return;
-
     List<String> selectedSymbols = _portfolio!.map((e) => e.symbol).toList();
-
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -118,14 +117,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      TextButton(
-                        onPressed: () => setDialogState(() => selectedSymbols = _portfolio!.map((e) => e.symbol).toList()),
-                        child: const Text('Select All'),
-                      ),
-                      TextButton(
-                        onPressed: () => setDialogState(() => selectedSymbols = []),
-                        child: const Text('Clear All'),
-                      ),
+                      TextButton(onPressed: () => setDialogState(() => selectedSymbols = _portfolio!.map((e) => e.symbol).toList()), child: const Text('Select All')),
+                      TextButton(onPressed: () => setDialogState(() => selectedSymbols = []), child: const Text('Clear All')),
                     ],
                   ),
                   const Divider(color: Colors.white10),
@@ -174,23 +167,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     bool isAutoEnabled = _userInfo?['is_auto_trading_enabled'] ?? true;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nasdaq is God'),
         actions: [
-          // 💡 자동매매 마스터 스위치
           IconButton(
-            icon: Icon(isAutoEnabled ? Icons.play_circle_fill : Icons.pause_circle_filled, 
-                 color: isAutoEnabled ? Colors.greenAccent : Colors.orangeAccent),
+            icon: Icon(isAutoEnabled ? Icons.play_circle_fill : Icons.pause_circle_filled, color: isAutoEnabled ? Colors.greenAccent : Colors.orangeAccent),
             tooltip: 'Master Auto-Trading Switch',
-            onPressed: () async {
-              await _apiService.toggleMasterAutoTrading();
-              _fetchData();
-            },
+            onPressed: () async { await _apiService.toggleMasterAutoTrading(); _fetchData(); },
           ),
           IconButton(icon: const Icon(Icons.settings_suggest), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const StrategyScreen()))),
           IconButton(icon: const Icon(Icons.history), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TradeHistoryScreen()))),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchData),
           IconButton(icon: const Icon(Icons.logout), onPressed: () async { await _apiService.logout(); if (mounted) Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const LoginScreen())); }),
         ],
       ),
@@ -207,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     _buildHeader(),
                     const SizedBox(height: 20),
-                    if (_marketSentiment != null && _marketSentiment!['error'] == null) ...[
+                    if (_marketSentiment != null) ...[
                       _buildMarketSentimentCard(),
                       const SizedBox(height: 20),
                     ],
@@ -225,12 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('My Portfolio', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-                        // 💡 청산 버튼
-                        TextButton.icon(
-                          onPressed: _showLiquidationDialog,
-                          icon: const Icon(Icons.exit_to_app, color: Colors.redAccent, size: 18),
-                          label: const Text('Liquidate', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                        ),
+                        TextButton.icon(onPressed: _showLiquidationDialog, icon: const Icon(Icons.exit_to_app, color: Colors.redAccent, size: 18), label: const Text('Liquidate', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -243,9 +226,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMarketSentimentCard() {
-    final score = _marketSentiment!['score'];
-    final sentiment = _marketSentiment!['sentiment'];
-    final summary = _marketSentiment!['summary'];
+    if (_marketSentiment!['error'] != null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(0.03), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
+            const SizedBox(width: 12),
+            Expanded(child: Text(_marketSentiment!['error'], style: const TextStyle(color: Colors.white70, fontSize: 13))),
+          ],
+        ),
+      );
+    }
+
+    final score = _marketSentiment!['score'] ?? 50;
+    final sentiment = _marketSentiment!['sentiment'] ?? 'Neutral';
+    final summary = _marketSentiment!['summary'] ?? '';
     final keywords = List<String>.from(_marketSentiment!['keywords'] ?? []);
     Color cardColor;
     if (score >= 60) cardColor = Colors.green[900]!; else if (score <= 40) cardColor = Colors.red[900]!; else cardColor = Colors.blueGrey[800]!;

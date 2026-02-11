@@ -13,7 +13,7 @@ class AIService:
         if self.api_key and self.api_key != "your_gemini_api_key_here":
             genai.configure(api_key=self.api_key)
         else:
-            logger.warning("GEMINI_API_KEY not set. AI features will be disabled.")
+            logger.warning("GEMINI_API_KEY not set. AI features will be limited.")
         
         self._market_cache = None
         self._market_cache_time = 0
@@ -30,7 +30,8 @@ class AIService:
             return models
         except Exception as e:
             logger.error(f"Failed to list models: {e}")
-            return [{"name": "models/gemini-2.0-flash", "display_name": "Gemini 2.0 Flash (Default)"}]
+            # 지원 종료된 모델 대신 최신 모델 힌트 제공
+            return [{"name": "models/gemini-2.0-flash", "display_name": "Gemini 2.0 Flash (Stable)"}]
 
     async def analyze_sentiment(self, symbol: str, news_list: List[Dict[str, Any]], model_name: str = "models/gemini-2.0-flash") -> Dict[str, Any]:
         """개별 종목 뉴스 분석"""
@@ -38,7 +39,6 @@ class AIService:
 
     async def analyze_market_outlook(self, news_list: List[Dict[str, Any]], model_name: str = "models/gemini-2.0-flash") -> Dict[str, Any]:
         """전체 시장 뉴스 분석"""
-        # 시장 분석은 캐싱 사용 (캐시는 기본 모델 기준)
         current_time = time.time()
         if self._market_cache and (current_time - self._market_cache_time < self.CACHE_DURATION):
             return self._market_cache
@@ -54,7 +54,7 @@ class AIService:
             return {"error": "AI API Key not configured"}
         
         if not news_list:
-            return {"score": 50, "summary": "분석할 뉴스가 부족합니다.", "sentiment": "Neutral", "sources": []}
+            return {"score": 50, "summary": "분석할 뉴스가 부족합니다.", "sentiment": "Neutral", "reason": "No news available", "sources": []}
 
         titles = [news.get('title', '') for news in news_list]
         news_text = "\n".join([f"- {t}" for t in titles[:10] if t])
@@ -96,9 +96,13 @@ class AIService:
                 text = text.split("```")[1].split("```")[0].strip()
             
             result = json.loads(text)
-            # 사용된 소스 뉴스 제목들도 함께 반환
             result["sources"] = titles[:10]
             return result
         except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg:
+                return {"error": "AI Quota Exceeded. Please try again in a few minutes."}
+            elif "404" in error_msg:
+                return {"error": f"Model {model_name} not found. Please select a different model."}
             logger.error(f"Gemini Error ({model_name}): {e}")
-            return {"error": f"AI Analysis Failed: {str(e)}"}
+            return {"error": f"AI Error: {error_msg}"}
