@@ -21,78 +21,71 @@ class ApiService {
 
   final _storage = const FlutterSecureStorage();
 
-  ApiService() {
-    _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        String? token;
-        
-        // 💡 웹 환경에서는 LocalStorage에서 직접 읽는 것이 더 안정적일 수 있음
-        if (kIsWeb) {
-          token = html.window.localStorage['jwt_token'];
-        } else {
-          token = await _storage.read(key: 'jwt_token');
-        }
-
-        if (token != null && token.isNotEmpty) {
-          options.headers['Authorization'] = 'Bearer $token';
-          print('🔑 [Auth] Token 부착됨: ${options.path}');
-        } else {
-          print('⚠️ [Auth] 전송할 Token이 없음: ${options.path}');
-        }
-        return handler.next(options);
+  Future<Options> _getAuthOptions() async {
+    String? token;
+    if (kIsWeb) {
+      token = html.window.localStorage['jwt_token'];
+    } else {
+      token = await _storage.read(key: 'jwt_token');
+    }
+    return Options(
+      headers: {
+        if (token != null) 'Authorization': 'Bearer $token',
       },
-      onError: (DioException e, handler) {
-        print('❌ [API Error] ${e.response?.statusCode} - ${e.message}');
-        return handler.next(e);
-      },
-    ));
+    );
   }
 
   // 로그인
   Future<Map<String, dynamic>?> login(String username, String password) async {
     try {
-      print('🔑 [Login] Attempting for $username');
+      print('🔑 [Login Attempt] URL: $_baseUrl/login');
       
-      final formData = FormData.fromMap({
-        'username': username,
-        'password': password,
-      });
-
+      // FastAPI OAuth2 표준: x-www-form-urlencoded
       final response = await _dio.post(
         '/login',
-        data: formData,
+        data: {
+          'username': username,
+          'password': password,
+        },
         options: Options(
           contentType: Headers.formUrlEncodedContentType,
         ),
       );
       
+      print('✅ [Login Server Response] Status: ${response.statusCode}');
+      print('📦 [Login Body] ${response.data}');
+      
       dynamic data = response.data;
       if (data is String) data = jsonDecode(data);
 
-      if (response.statusCode == 200 && data != null) {
+      if (data != null && data['access_token'] != null) {
         final token = data['access_token'];
-        if (token != null) {
-          // 💡 웹과 앱 모두에서 토큰 저장
-          if (kIsWeb) {
-            html.window.localStorage['jwt_token'] = token;
-          }
-          await _storage.write(key: 'jwt_token', value: token);
-          print('✅ [Login] 성공 및 토큰 저장 완료');
-          return data;
+        if (kIsWeb) {
+          html.window.localStorage['jwt_token'] = token;
         }
+        await _storage.write(key: 'jwt_token', value: token);
+        print('💾 [Login] Token saved successfully');
+        return data;
       }
+      
+      print('❌ [Login] Token not found in response body');
       return null;
     } catch (e) {
-      print('🚨 [Login Error] $e');
+      if (e is DioException) {
+        print('🚨 [Login Dio Error] Status: ${e.response?.statusCode}');
+        print('🚨 [Login Dio Error Body] ${e.response?.data}');
+      } else {
+        print('🚨 [Login Unknown Error] $e');
+      }
       return null;
     }
   }
 
   Future<Map<String, dynamic>?> getMe() async {
     try {
-      final response = await _dio.get('/users/me');
-      dynamic data = response.data;
-      return data is String ? jsonDecode(data) : data;
+      final options = await _getAuthOptions();
+      final response = await _dio.get('/users/me', options: options);
+      return response.data is String ? jsonDecode(response.data) : response.data;
     } catch (e) {
       return null;
     }
@@ -100,9 +93,9 @@ class ApiService {
 
   Future<List<dynamic>?> getPortfolio() async {
     try {
-      final response = await _dio.get('/portfolio');
-      dynamic data = response.data;
-      return data is String ? jsonDecode(data) : data;
+      final options = await _getAuthOptions();
+      final response = await _dio.get('/portfolio', options: options);
+      return response.data is String ? jsonDecode(response.data) : response.data;
     } catch (e) {
       return null;
     }
@@ -111,8 +104,7 @@ class ApiService {
   Future<Map<String, dynamic>?> getIndicators(String symbol) async {
     try {
       final response = await _dio.get('/stock/$symbol/indicators');
-      dynamic data = response.data;
-      return data is String ? jsonDecode(data) : data;
+      return response.data is String ? jsonDecode(response.data) : response.data;
     } catch (e) {
       return null;
     }
@@ -121,8 +113,7 @@ class ApiService {
   Future<Map<String, dynamic>?> searchStock(String query) async {
     try {
       final response = await _dio.get('/search', queryParameters: {'q': query});
-      dynamic data = response.data;
-      return data is String ? jsonDecode(data) : data;
+      return response.data is String ? jsonDecode(response.data) : response.data;
     } catch (e) {
       return null;
     }
@@ -131,25 +122,21 @@ class ApiService {
   // 주식 주문
   Future<Map<String, dynamic>?> placeOrder(String symbol, double quantity, String side) async {
     try {
-      print('🚀 [Trade] 주문 전송: $side $symbol $quantity');
-      // 💡 queryParameters 대신 data(Body)로 전송 시도 (CORS 이슈 대응)
+      final options = await _getAuthOptions();
       final response = await _dio.post(
         '/trade/order', 
         queryParameters: {
           'symbol': symbol,
           'quantity': quantity,
           'side': side,
-        }
+        },
+        options: options,
       );
       
       dynamic data = response.data;
       if (data is String) data = jsonDecode(data);
-      print('✅ [Trade] 주문 결과: $data');
       return data;
     } catch (e) {
-      if (e is DioException) {
-        print('❌ [Trade Error] ${e.response?.statusCode}: ${e.response?.data}');
-      }
       return null;
     }
   }
