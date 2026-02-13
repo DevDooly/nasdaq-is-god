@@ -233,4 +233,47 @@ class ApiService {
       return response.data;
     } catch (e) { return null; }
   }
+
+  // 💡 Guru Watch 관련 추가
+  Future<List<dynamic>?> getGurus() async {
+    try {
+      final response = await _dio.get('/gurus');
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<Map<String, dynamic>?> addGuru(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post('/gurus', data: data);
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<Map<String, dynamic>?> updateGuru(int id, Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.patch('/gurus/$id', data: data);
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<bool> deleteGuru(int id) async {
+    try {
+      final response = await _dio.delete('/gurus/$id');
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
+  Future<List<dynamic>?> getGuruInsights({int limit = 20}) async {
+    try {
+      final response = await _dio.get('/gurus/insights', queryParameters: {'limit': limit});
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<Map<String, dynamic>?> analyzeGuruStatement(int guruId, String content) async {
+    try {
+      final response = await _dio.post('/gurus/$guruId/analyze', queryParameters: {'content': content});
+      return response.data;
+    } catch (e) { return null; }
+  }
 }

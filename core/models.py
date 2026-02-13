@@ -91,6 +91,28 @@ class AISentimentHistory(SQLModel, table=True):
 
     user: User = Relationship(back_populates="ai_histories")
 
+class Guru(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    handle: str = Field(unique=True) # 예: @elonmusk
+    description: Optional[str] = None
+    influence_score: int = Field(default=50) # 중요도 (1~100)
+    target_symbols: str = Field(default="") # 관련 종목 (예: "TSLA,NVDA")
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class GuruInsight(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    guru_id: int = Field(foreign_key="guru.id", index=True)
+    symbol: Optional[str] = Field(default=None, index=True)
+    content: str # 발언 원문
+    sentiment: str # Bullish, Bearish, Neutral
+    score: int # 0-100
+    summary: str
+    reason: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow, index=True)
+    source_url: Optional[str] = None
+
 # 💡 API 키 관리 테이블
 class APIKeyConfig(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

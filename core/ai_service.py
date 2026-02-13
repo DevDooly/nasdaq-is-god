@@ -119,3 +119,46 @@ class AIService:
             error_msg = str(e)
             if "429" in error_msg: return {"error": "AI Quota Exceeded."}
             return {"error": error_msg}
+
+    async def analyze_social_impact(self, guru_name: str, content: str, target_symbols: str = "", model_name: str = "models/gemini-2.0-flash") -> Dict[str, Any]:
+        """
+        영향력 있는 인물의 발언(Social Media)을 분석합니다.
+        """
+        prompt = f"""
+        당신은 월스트리트의 시니어 퀀트 애널리스트입니다. 
+        시장 영향력이 큰 인물 '{guru_name}'의 최근 발언을 분석하여 주식 시장에 미칠 파급력을 평가하십시오.
+
+        [인물]: {guru_name} (주요 관련 종목: {target_symbols})
+        [발언 원문]: "{content}"
+
+        다음 형식의 JSON으로만 응답하십시오:
+        {{
+            "score": 0~100 (호재일수록 100에 가까움),
+            "sentiment": "Bullish" | "Bearish" | "Neutral",
+            "summary": "한국어 한 줄 요약",
+            "reason": "분석 근거 (한국어)",
+            "main_symbol": "영향을 받는 가장 핵심적인 종목 티커 (없으면 null)"
+        }}
+        """
+
+        try:
+            import asyncio
+            genai.configure(api_key=self.default_api_key)
+            model = genai.GenerativeModel(model_name)
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, lambda: model.generate_content(prompt))
+            
+            text = response.text.strip()
+            if "```json" in text: text = text.split("```json")[1].split("```")[0].strip()
+            elif "```" in text: text = text.split("```")[1].split("```")[0].strip()
+            
+            return json.loads(text)
+        except Exception as e:
+            logger.error(f"Social analysis error for {guru_name}: {e}")
+            return {
+                "score": 50,
+                "sentiment": "Neutral",
+                "summary": "분석 실패",
+                "reason": str(e),
+                "main_symbol": None
+            }

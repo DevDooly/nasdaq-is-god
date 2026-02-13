@@ -4,6 +4,7 @@ import '../models/asset.dart';
 import 'stock_detail_screen.dart';
 import 'trade_history_screen.dart';
 import 'strategy_screen.dart';
+import 'guru_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
 import 'package:intl/intl.dart';
@@ -165,6 +166,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           const Icon(Icons.auto_graph, color: Colors.cyanAccent, size: 32),
           const Spacer(),
           _sidebarIcon(Icons.dashboard, true),
+          _sidebarIcon(Icons.psychology, false, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GuruScreen()))),
           _sidebarIcon(Icons.settings_suggest, false, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const StrategyScreen()))),
           _sidebarIcon(Icons.history, false, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TradeHistoryScreen()))),
           _sidebarIcon(Icons.settings, false, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()))),
@@ -219,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           },
         ),
         if (MediaQuery.of(context).size.width <= 900) ...[
+          IconButton(icon: const Icon(Icons.psychology, color: Colors.purpleAccent), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GuruScreen()))),
           IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()))),
           IconButton(icon: const Icon(Icons.logout), onPressed: () async {
             await _apiService.logout();

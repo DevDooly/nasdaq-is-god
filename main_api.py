@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from core.stock_service import get_stock_info, find_ticker, get_stock_news
 from core.database import init_db, get_session, engine
-from core.models import User, UserCreate, UserRead, Token, TradingStrategy, StrategyCreate, StrategyRead, StockAsset, AISentimentHistory, APIKeyConfig
+from core.models import User, UserCreate, UserRead, Token, TradingStrategy, StrategyCreate, StrategyRead, StockAsset, AISentimentHistory, APIKeyConfig, Guru, GuruInsight
 from core.auth import get_password_hash, verify_password, create_access_token, decode_access_token
 from core.trade_service import TradeService
 from core.broker import TradingBroker
@@ -255,6 +255,61 @@ async def get_market_sentiment():
         import traceback
         logger.error(traceback.format_exc())
         return {"error": str(e)}
+
+# --- Guru Watch (Social Sentiment Alpha) ---
+@app.get("/gurus")
+async def list_gurus(session: AsyncSession = Depends(get_session)):
+    statement = select(Guru).order_by(Guru.influence_score.desc())
+    return (await session.execute(statement)).scalars().all()
+
+@app.post("/gurus")
+async def add_guru(guru_data: Dict[str, Any], current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    new_guru = Guru(**guru_data)
+    session.add(new_guru)
+    await session.commit()
+    return new_guru
+
+@app.patch("/gurus/{guru_id}")
+async def update_guru(guru_id: int, guru_data: Dict[str, Any], current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    target = (await session.execute(select(Guru).where(Guru.id == guru_id))).scalar_one_or_none()
+    if not target: raise HTTPException(status_code=404)
+    for k, v in guru_data.items(): setattr(target, k, v)
+    await session.commit()
+    return target
+
+@app.delete("/gurus/{guru_id}")
+async def delete_guru(guru_id: int, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    target = (await session.execute(select(Guru).where(Guru.id == guru_id))).scalar_one_or_none()
+    if not target: raise HTTPException(status_code=404)
+    await session.delete(target)
+    await session.commit()
+    return {"status": "success"}
+
+@app.get("/gurus/insights")
+async def list_guru_insights(limit: int = 20, session: AsyncSession = Depends(get_session)):
+    statement = select(GuruInsight, Guru.name, Guru.handle).join(Guru).order_by(GuruInsight.timestamp.desc()).limit(limit)
+    results = (await session.execute(statement)).all()
+    return [{"insight": r[0], "guru_name": r[1], "guru_handle": r[2]} for r in results]
+
+@app.post("/gurus/{guru_id}/analyze")
+async def analyze_guru_statement(guru_id: int, content: str, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    guru = (await session.execute(select(Guru).where(Guru.id == guru_id))).scalar_one_or_none()
+    if not guru: raise HTTPException(status_code=404)
+    
+    analysis = await ai_service.analyze_social_impact(guru.name, content, target_symbols=guru.target_symbols)
+    
+    insight = GuruInsight(
+        guru_id=guru.id,
+        content=content,
+        sentiment=analysis["sentiment"],
+        score=analysis["score"],
+        summary=analysis["summary"],
+        reason=analysis["reason"],
+        symbol=analysis.get("main_symbol")
+    )
+    session.add(insight)
+    await session.commit()
+    return insight
 
 # --- Common ---
 @app.get("/users/me", response_model=UserRead)
