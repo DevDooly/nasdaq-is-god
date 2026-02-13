@@ -3,6 +3,10 @@
 # Nasdaq is God - System Integration Checker
 # This script verifies the integrity of both Backend and Frontend.
 
+# 프로젝트 루트 디렉토리 설정 (스크립트 위치 기준 상위 디렉토리)
+PROJECT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+cd "$PROJECT_ROOT"
+
 echo "🔍 Starting System Integration Check..."
 echo "---------------------------------------"
 

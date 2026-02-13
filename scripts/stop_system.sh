@@ -3,6 +3,10 @@
 # Nasdaq is God - System Shutdown Script
 # This script stops all running components: Database, Backend, Frontend, and Bot.
 
+# 프로젝트 루트 디렉토리 설정
+PROJECT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+cd "$PROJECT_ROOT"
+
 echo "🛑 Stopping Nasdaq is God System..."
 echo "---------------------------------------"
 
