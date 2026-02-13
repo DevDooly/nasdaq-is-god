@@ -17,6 +17,7 @@ def main() -> None:
     # 영어 명령어 핸들러 등록
     application.add_handler(CommandHandler("start", handlers.start))
     application.add_handler(CommandHandler("help", handlers.help_command))
+    application.add_handler(CommandHandler("id", handlers.id_command))
     application.add_handler(CommandHandler("sp500", handlers.sp500_command))
     application.add_handler(CommandHandler("nasdaq", handlers.nasdaq_command))
     application.add_handler(CommandHandler("vix", handlers.vix_command))

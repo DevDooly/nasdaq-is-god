@@ -5,16 +5,25 @@ import os
 import httpx
 from typing import List, Dict, Any, Set
 from fastapi import WebSocket
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger("notification_service")
 
 class NotificationService:
     def __init__(self):
         self.active_connections: Dict[int, Set[WebSocket]] = {} # user_id -> Set of WebSockets
-        self.telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        # TELEGRAM_BOT_TOKEN을 먼저 시도하고, 없으면 TELEGRAM_TOKEN 사용
+        self.telegram_token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN")
+        
+        # 만약 기본값이 'your_telegram_bot_token_here'라면 실제 토큰으로 교체 시도
+        if self.telegram_token == "your_telegram_bot_token_here":
+            self.telegram_token = os.getenv("TELEGRAM_TOKEN")
+
         # Support multiple chat IDs separated by commas
         chat_ids_str = os.getenv("TELEGRAM_CHAT_ID", "")
-        self.telegram_chat_ids = [cid.strip() for cid in chat_ids_str.split(",") if cid.strip()]
+        self.telegram_chat_ids = [cid.strip() for cid in chat_ids_str.split(",") if cid.strip() and "your_telegram" not in cid]
 
     async def connect(self, user_id: int, websocket: WebSocket):
         await websocket.accept()

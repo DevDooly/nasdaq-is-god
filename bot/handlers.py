@@ -11,8 +11,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_html(
         f"안녕하세요, {user.mention_html()}님!\n"
-        f"저는 증시 정보를 알려주는 봇입니다. /help 명령어로 사용법을 확인하세요."
+        f"저는 증시 정보를 알려주는 봇입니다. /help 명령어로 사용법을 확인하세요.\n"
+        f"현재 채팅방의 ID는 <code>{update.effective_chat.id}</code> 입니다."
     )
+
+async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/id 명령어 응답 - Chat ID 확인용"""
+    chat_id = update.effective_chat.id
+    await update.message.reply_html(f"현재 채팅방의 ID: <code>{chat_id}</code>\n이 ID를 .env 파일의 TELEGRAM_CHAT_ID에 설정해주세요.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/help 명령어 응답"""
