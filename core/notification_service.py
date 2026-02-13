@@ -12,7 +12,9 @@ class NotificationService:
     def __init__(self):
         self.active_connections: Dict[int, Set[WebSocket]] = {} # user_id -> Set of WebSockets
         self.telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
-        self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+        # Support multiple chat IDs separated by commas
+        chat_ids_str = os.getenv("TELEGRAM_CHAT_ID", "")
+        self.telegram_chat_ids = [cid.strip() for cid in chat_ids_str.split(",") if cid.strip()]
 
     async def connect(self, user_id: int, websocket: WebSocket):
         await websocket.accept()
@@ -46,7 +48,7 @@ class NotificationService:
                 self.active_connections[user_id].remove(ws)
 
         # 2. Telegram 알림 (설정된 경우)
-        if send_telegram and self.telegram_token and self.telegram_chat_id:
+        if send_telegram and self.telegram_token and self.telegram_chat_ids:
             asyncio.create_task(self._send_telegram(message))
 
     async def broadcast(self, message: Dict[str, Any]):
@@ -61,23 +63,24 @@ class NotificationService:
                         pass
 
     async def _send_telegram(self, message: Dict[str, Any]):
-        """텔레그램 봇을 통해 메시지를 전송합니다."""
+        """텔레그램 봇을 통해 모든 채팅방에 메시지를 전송합니다."""
         title = message.get("title", "알림")
         body = message.get("body", "")
         formatted_msg = f"🔔 *{title}*\n\n{body}"
         
-        url = f"https://api.telegram.org/bot{self.telegram_token}/sendMessage"
-        payload = {
-            "chat_id": self.telegram_chat_id,
-            "text": formatted_msg,
-            "parse_mode": "Markdown"
-        }
-        
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(url, json=payload)
-        except Exception as e:
-            logger.error(f"Failed to send Telegram message: {e}")
+        async with httpx.AsyncClient() as client:
+            for chat_id in self.telegram_chat_ids:
+                url = f"https://api.telegram.org/bot{self.telegram_token}/sendMessage"
+                payload = {
+                    "chat_id": chat_id,
+                    "text": formatted_msg,
+                    "parse_mode": "Markdown"
+                }
+                try:
+                    await client.post(url, json=payload)
+                    logger.info(f"Sent Telegram notification to {chat_id}")
+                except Exception as e:
+                    logger.error(f"Failed to send Telegram message to {chat_id}: {e}")
 
 # 글로벌 인스턴스
 notification_service = NotificationService()

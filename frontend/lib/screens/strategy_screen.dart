@@ -42,20 +42,20 @@ class _StrategyScreenState extends State<StrategyScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Add RSI Strategy', style: TextStyle(color: Colors.white)),
+        title: const Text('RSI 전략 추가', style: TextStyle(color: Colors.white)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: nameController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Strategy Name', labelStyle: TextStyle(color: Colors.grey))),
-              TextField(controller: symbolController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Symbol (e.g. TSLA)', labelStyle: TextStyle(color: Colors.grey))),
-              TextField(controller: buyRsiController, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Buy RSI Threshold', labelStyle: TextStyle(color: Colors.grey))),
-              TextField(controller: sellRsiController, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Sell RSI Threshold', labelStyle: TextStyle(color: Colors.grey))),
+              TextField(controller: nameController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: '전략 이름', labelStyle: TextStyle(color: Colors.grey))),
+              TextField(controller: symbolController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: '티커 (예: TSLA)', labelStyle: TextStyle(color: Colors.grey))),
+              TextField(controller: buyRsiController, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: '매수 RSI 기준값', labelStyle: TextStyle(color: Colors.grey))),
+              TextField(controller: sellRsiController, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: '매도 RSI 기준값', labelStyle: TextStyle(color: Colors.grey))),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
           ElevatedButton(
             onPressed: () async {
               final params = {
@@ -72,7 +72,7 @@ class _StrategyScreenState extends State<StrategyScreen> {
               Navigator.pop(context);
               _fetchStrategies();
             },
-            child: const Text('Add'),
+            child: const Text('추가'),
           ),
         ],
       ),
@@ -82,12 +82,12 @@ class _StrategyScreenState extends State<StrategyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Auto Trading Strategies')),
+      appBar: AppBar(title: const Text('자동 매매 전략')),
       backgroundColor: const Color(0xFF0F172A),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _strategies == null || _strategies!.isEmpty
-              ? const Center(child: Text('No strategies found', style: TextStyle(color: Colors.grey)))
+               ? const Center(child: Text('등록된 전략이 없습니다', style: TextStyle(color: Colors.grey)))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: _strategies!.length,
@@ -110,10 +110,10 @@ class _StrategyScreenState extends State<StrategyScreen> {
                           final confirm = await showDialog<bool>(
                             context: context,
                             builder: (context) => AlertDialog(
-                              title: const Text('Delete Strategy?'),
+                              title: const Text('전략을 삭제하시겠습니까?'),
                               actions: [
-                                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
-                                TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes')),
+                                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('아니오')),
+                                TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('예')),
                               ],
                             ),
                           );

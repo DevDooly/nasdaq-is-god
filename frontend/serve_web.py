@@ -29,8 +29,7 @@ def run_server():
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print("
-🛑 Server stopped.")
+            print("\n🛑 Server stopped.")
 
 if __name__ == "__main__":
     run_server()

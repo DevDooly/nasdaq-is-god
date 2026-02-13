@@ -198,14 +198,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       title: Row(
         children: [
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('TERMINAL', style: TextStyle(fontSize: 12, color: Colors.cyanAccent.withOpacity(0.7), letterSpacing: 2)),
-            Text('Nasdaq is God', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22)),
+            Text('터미널', style: TextStyle(fontSize: 12, color: Colors.cyanAccent.withOpacity(0.7), letterSpacing: 2)),
+            Text('나스닥의 신', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22)),
           ]),
           const SizedBox(width: 16),
           _buildLiveIndicator(),
         ],
       ),
       actions: [
+        IconButton(
+          icon: const Icon(Icons.search),
+          onPressed: _showSearchDialog,
+        ),
         IconButton(
           icon: Icon(isAutoEnabled ? Icons.play_circle_fill : Icons.pause_circle_filled, 
                color: isAutoEnabled ? Colors.greenAccent : Colors.orangeAccent, size: 28),
@@ -226,6 +230,71 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  void _showSearchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('종목 검색', style: TextStyle(color: Colors.cyanAccent, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2)),
+            content: TextField(
+              controller: _searchController,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+              decoration: InputDecoration(
+                hintText: '티커 또는 종목명 입력 (예: TSLA)',
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                prefixIcon: const Icon(Icons.search, color: Colors.cyanAccent),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.05),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+              onSubmitted: (val) async {
+                if (val.isEmpty) return;
+                setDialogState(() => _isSearching = true);
+                final result = await _apiService.searchStock(val);
+                setDialogState(() => _isSearching = false);
+                if (result != null && mounted) {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: result['symbol'])));
+                } else if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('종목을 찾을 수 없습니다.')));
+                }
+              },
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+              if (_isSearching)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.cyanAccent)),
+                )
+              else
+                ElevatedButton(
+                  onPressed: () async {
+                    if (_searchController.text.isEmpty) return;
+                    setDialogState(() => _isSearching = true);
+                    final result = await _apiService.searchStock(_searchController.text);
+                    setDialogState(() => _isSearching = false);
+                    if (result != null && mounted) {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: result['symbol'])));
+                    } else if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('종목을 찾을 수 없습니다.')));
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent[700]),
+                  child: const Text('검색'),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildLiveIndicator() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -233,7 +302,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: Row(children: [
         Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle)),
         const SizedBox(width: 6),
-        const Text('LIVE', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+        const Text('실시간', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
       ]),
     );
   }
@@ -270,7 +339,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       padding: const EdgeInsets.all(24),
       decoration: _glassDecoration(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('TOTAL NET WORTH', style: TextStyle(color: Colors.cyanAccent.withOpacity(0.5), fontSize: 12, letterSpacing: 1)),
+        Text('총 자산 가치', style: TextStyle(color: Colors.cyanAccent.withOpacity(0.5), fontSize: 12, letterSpacing: 1)),
         const SizedBox(height: 8),
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text('\$${NumberFormat('#,##0.00').format(totalEquity)}', style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white)),
@@ -282,8 +351,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ]),
         const SizedBox(height: 24),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          _summaryItem('Buying Power', '\$${NumberFormat('#,##0.00').format(_summary!['cash_balance'])}'),
-          _summaryItem('Unrealized P/L', '\$${NumberFormat('#,##0.00').format(totalProfit)}', color: profitColor),
+          _summaryItem('매수 가능 금액', '\$${NumberFormat('#,##0.00').format(_summary!['cash_balance'])}'),
+          _summaryItem('미실현 손익', '\$${NumberFormat('#,##0.00').format(totalProfit)}', color: profitColor),
         ]),
       ]),
     );
@@ -299,7 +368,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildMarketSentimentCard() {
     if (_marketSentiment == null) return const SizedBox();
     if (_marketSentiment!['error'] != null) {
-      return Container(padding: const EdgeInsets.all(24), decoration: _glassDecoration(), child: const Center(child: Text('AI Offline', style: TextStyle(color: Colors.grey))));
+      return Container(padding: const EdgeInsets.all(24), decoration: _glassDecoration(), child: const Center(child: Text('AI 분석 오프라인', style: TextStyle(color: Colors.grey))));
     }
     final score = _marketSentiment!['score'] ?? 50;
     final sentiment = _marketSentiment!['sentiment'] ?? 'Neutral';
@@ -310,11 +379,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       decoration: _glassDecoration(color: Colors.purpleAccent.withOpacity(0.05)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('MARKET PULSE', style: TextStyle(color: Colors.purpleAccent, fontSize: 12, letterSpacing: 1, fontWeight: FontWeight.bold)),
+          const Text('시장 상태', style: TextStyle(color: Colors.purpleAccent, fontSize: 12, letterSpacing: 1, fontWeight: FontWeight.bold)),
           Text('$score/100', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         ]),
         const SizedBox(height: 16),
-        Text(sentiment.toUpperCase(), style: TextStyle(color: score >= 50 ? Colors.greenAccent : Colors.redAccent, fontSize: 24, fontWeight: FontWeight.w900)), // Fixed
+        Text(sentiment.toUpperCase() == 'BULLISH' ? '강세' : (sentiment.toUpperCase() == 'BEARISH' ? '약세' : '중립'), 
+            style: TextStyle(color: score >= 50 ? Colors.greenAccent : Colors.redAccent, fontSize: 24, fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
         Text(summary, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 13)),
       ]),
@@ -342,8 +412,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildAssetSection() {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        const Text('PORTFOLIO TRACKER', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        TextButton.icon(onPressed: _showLiquidationDialog, icon: const Icon(Icons.bolt, color: Colors.redAccent), label: const Text('LIQUIDATE', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
+        const Text('포트폴리오 현황', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        TextButton.icon(onPressed: _showLiquidationDialog, icon: const Icon(Icons.bolt, color: Colors.redAccent), label: const Text('전량 매도', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
       ]),
       const SizedBox(height: 16),
       _buildAssetList(),
@@ -352,14 +422,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildEquityCurveSection() {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('EQUITY PERFORMANCE', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      const Text('자산 변동 추이', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
       const SizedBox(height: 16),
       Container(padding: const EdgeInsets.all(20), decoration: _glassDecoration(), child: _buildEquityChart()),
     ]);
   }
 
   Widget _buildAssetList() {
-    if (_portfolio == null || _portfolio!.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('Empty Portfolio')));
+    if (_portfolio == null || _portfolio!.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('포트폴리오가 비어 있습니다')));
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -380,7 +450,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Row(children: [
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(asset.symbol, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('${asset.quantity} shares', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                Text('${asset.quantity} 주', style: const TextStyle(color: Colors.grey, fontSize: 12)),
               ]),
               const Spacer(),
               _buildPriceColumn(curPrice, profitRate, blinkColor),
@@ -399,7 +469,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildEquityChart() {
-    if (_equityHistory == null || _equityHistory!.isEmpty) return const SizedBox(height: 200, child: Center(child: Text('No data')));
+    if (_equityHistory == null || _equityHistory!.isEmpty) return const SizedBox(height: 200, child: Center(child: Text('데이터 없음')));
     List<FlSpot> spots = [];
     for (int i = 0; i < _equityHistory!.length; i++) {
       spots.add(FlSpot(i.toDouble(), (_equityHistory![i]['total_equity'] as num).toDouble()));
@@ -407,8 +477,36 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return SizedBox(
       height: 250,
       child: LineChart(LineChartData(
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: true,
+          horizontalInterval: 10000,
+          verticalInterval: 1,
+          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
+          getDrawingVerticalLine: (value) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 30,
+              interval: (_equityHistory!.length / 5).clamp(1, double.infinity),
+              getTitlesWidget: (value, meta) {
+                int index = value.toInt();
+                if (index < 0 || index >= _equityHistory!.length) return const SizedBox();
+                DateTime date = DateTime.parse(_equityHistory![index]['timestamp']).toLocal();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(DateFormat('MM/dd').format(date), style: TextStyle(color: Colors.grey[600], fontSize: 10)),
+                );
+              },
+            ),
+          ),
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
         borderData: FlBorderData(show: false),
         lineBarsData: [
           LineChartBarData(
@@ -434,19 +532,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         builder: (context, setDialogState) {
           return AlertDialog(
             backgroundColor: const Color(0xFF1E293B),
-            title: const Text('⚠️ Portfolio Liquidation', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            title: const Text('⚠️ 포트폴리오 전량 매도', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
             content: SizedBox(
               width: double.maxFinite,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Select stocks to sell all positions immediately:', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  const Text('즉시 매도할 종목을 선택하세요:', style: TextStyle(color: Colors.white70, fontSize: 13)),
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      TextButton(onPressed: () => setDialogState(() => selectedSymbols = _portfolio!.map((e) => e.symbol).toList()), child: const Text('Select All')),
-                      TextButton(onPressed: () => setDialogState(() => selectedSymbols = []), child: const Text('Clear All')),
+                      TextButton(onPressed: () => setDialogState(() => selectedSymbols = _portfolio!.map((e) => e.symbol).toList()), child: const Text('전체 선택')),
+                      TextButton(onPressed: () => setDialogState(() => selectedSymbols = []), child: const Text('전체 해제')),
                     ],
                   ),
                   const Divider(color: Colors.white10),
@@ -458,7 +556,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         final asset = _portfolio![index];
                         return CheckboxListTile(
                           title: Text(asset.symbol, style: const TextStyle(color: Colors.white)),
-                          subtitle: Text('${asset.quantity} shares', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          subtitle: Text('${asset.quantity} 주', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                           value: selectedSymbols.contains(asset.symbol),
                           onChanged: (val) {
                             setDialogState(() {
@@ -474,7 +572,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
                 onPressed: selectedSymbols.isEmpty ? null : () async {
@@ -482,7 +580,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   await _apiService.liquidatePositions(selectedSymbols);
                   _fetchData();
                 },
-                child: const Text('Confirm Sell', style: TextStyle(color: Colors.white)),
+                child: const Text('매수 확정', style: TextStyle(color: Colors.white)),
               ),
             ],
           );

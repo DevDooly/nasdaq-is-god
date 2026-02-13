@@ -86,8 +86,15 @@ class AIService:
         if not api_key: return {"error": "API Key is empty"}
         if not news_list: return {"score": 50, "summary": "뉴스가 없습니다.", "sentiment": "Neutral", "reason": "No news", "sources": []}
 
-        titles = [news.get('title', '') for news in news_list]
-        news_text = "\n".join([f"- {t}" for t in titles[:10] if t])
+        titles = []
+        for news in news_list:
+            title = news.get('title')
+            if not title and 'content' in news and isinstance(news['content'], dict):
+                title = news['content'].get('title')
+            if title:
+                titles.append(title)
+        
+        news_text = "\n".join([f"- {t}" for t in titles[:10]])
         prompt = f"""
         당신은 시니어 퀀트 애널리스트입니다. {target_name} 최신 뉴스 분석:
         {news_text}

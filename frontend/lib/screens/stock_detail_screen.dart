@@ -88,7 +88,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFF020617),
         appBar: AppBar(
-          title: Text('${widget.symbol} Terminal', style: const TextStyle(fontWeight: FontWeight.w900)),
+          title: Text('${widget.symbol} 분석 터미널', style: const TextStyle(fontWeight: FontWeight.w900)),
           backgroundColor: Colors.transparent,
         ),
         body: _isLoading
@@ -141,7 +141,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   Widget _buildPriceHeader() {
     if (_data == null) return const SizedBox();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('MARKET PRICE', style: TextStyle(color: Colors.cyanAccent.withOpacity(0.5), fontSize: 12, letterSpacing: 2)),
+      Text('현재가', style: TextStyle(color: Colors.cyanAccent.withOpacity(0.5), fontSize: 12, letterSpacing: 2)),
       const SizedBox(height: 4),
       Wrap(
         crossAxisAlignment: WrapCrossAlignment.end,
@@ -163,9 +163,9 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   Widget _buildRSIBadge() {
     final rsi = _data?.rsi ?? 50;
     Color color = Colors.cyanAccent;
-    String label = 'NEUTRAL';
-    if (rsi >= 70) { color = Colors.redAccent; label = 'OVERBOUGHT'; }
-    else if (rsi <= 30) { color = Colors.greenAccent; label = 'OVERSOLD'; }
+    String label = '중립';
+    if (rsi >= 70) { color = Colors.redAccent; label = '과매수'; }
+    else if (rsi <= 30) { color = Colors.greenAccent; label = '과매도'; }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: color.withOpacity(0.3))),
@@ -184,7 +184,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text('AI QUANT ADVISOR', style: TextStyle(color: Colors.purpleAccent, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              const Text('AI 분석가', style: TextStyle(color: Colors.purpleAccent, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
               if (_aiModels != null) _buildModelPicker(),
             ],
           ),
@@ -216,9 +216,9 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
 
   Widget _buildEmptyAIState() {
     return Center(child: Column(children: [
-      const Text('No recent analysis found', style: TextStyle(color: Colors.grey)),
+      const Text('최근 분석 데이터가 없습니다', style: TextStyle(color: Colors.grey)),
       const SizedBox(height: 16),
-      ElevatedButton.icon(onPressed: () => _runAnalysis(force: false), icon: const Icon(Icons.psychology), label: const Text('GENERATE INSIGHT'), style: ElevatedButton.styleFrom(backgroundColor: Colors.purpleAccent)),
+      ElevatedButton.icon(onPressed: () => _runAnalysis(force: false), icon: const Icon(Icons.psychology), label: const Text('분석 리포트 생성'), style: ElevatedButton.styleFrom(backgroundColor: Colors.purpleAccent)),
     ]));
   }
 
@@ -234,16 +234,17 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
         Text('$score', style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w900)),
         const Text('/100', style: TextStyle(color: Colors.grey, fontSize: 16)),
         const Spacer(),
-        Text(sentiment.toUpperCase(), style: TextStyle(color: _getSentimentColor(sentiment), fontSize: 20, fontWeight: FontWeight.bold)),
+        Text(sentiment.toUpperCase() == 'BULLISH' ? '강세' : (sentiment.toUpperCase() == 'BEARISH' ? '약세' : '중립'), 
+            style: TextStyle(color: _getSentimentColor(sentiment), fontSize: 20, fontWeight: FontWeight.bold)),
       ]),
       const Divider(height: 32, color: Colors.white10),
       Text(summary, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, height: 1.5)),
       const SizedBox(height: 12),
       Text(reason, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
       const SizedBox(height: 24),
-      if (sources.isNotEmpty) InkWell(onTap: () => _showSourcesDialog(sources), child: Text('VIEW ${sources.length} RAW SOURCES >', style: const TextStyle(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1))),
+      if (sources.isNotEmpty) InkWell(onTap: () => _showSourcesDialog(sources), child: Text('${sources.length}개의 뉴스 출처 보기 >', style: const TextStyle(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1))),
       const SizedBox(height: 24),
-      Align(alignment: Alignment.centerRight, child: TextButton(onPressed: () => _runAnalysis(force: true), child: const Text('REFRESH ANALYTICS', style: TextStyle(fontSize: 11, color: Colors.purpleAccent)))),
+      Align(alignment: Alignment.centerRight, child: TextButton(onPressed: () => _runAnalysis(force: true), child: const Text('분석 업데이트', style: TextStyle(fontSize: 11, color: Colors.purpleAccent)))),
     ]);
   }
 
@@ -288,10 +289,16 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   }
 
   Widget _buildPriceChart() {
-    if (_data == null || _data!.history.isEmpty) return const Center(child: Text('No data'));
+    if (_data == null || _data!.history.isEmpty) return const Center(child: Text('데이터 없음'));
     List<FlSpot> spots = _data!.history.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.price)).toList();
     return LineChart(LineChartData(
-      gridData: const FlGridData(show: false),
+      gridData: FlGridData(
+        show: true,
+        drawVerticalLine: true,
+        horizontalInterval: (_data!.history.isNotEmpty ? 10 : 1),
+        getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
+        getDrawingVerticalLine: (value) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
+      ),
       titlesData: const FlTitlesData(show: false),
       borderData: FlBorderData(show: false),
       lineBarsData: [
@@ -313,8 +320,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     final holdingsInfo = Column(
       crossAxisAlignment: isMobile ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: [
-        const Text('CURRENT HOLDINGS', style: TextStyle(color: Colors.grey, fontSize: 11)),
-        Text('${_heldQuantity.toStringAsFixed(2)} SHARES', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+        const Text('보유 수량', style: TextStyle(color: Colors.grey, fontSize: 11)),
+        Text('${_heldQuantity.toStringAsFixed(2)} 주', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
       ],
     );
 
@@ -326,7 +333,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
           minimumSize: isMobile ? const Size(double.infinity, 48) : null,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         ),
-        child: const Text('EXECUTE BUY', style: TextStyle(fontWeight: FontWeight.bold)),
+        child: const Text('매수 실행', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       if (isMobile) const SizedBox(height: 12) else const SizedBox(width: 12),
       ElevatedButton(
@@ -336,7 +343,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
           minimumSize: isMobile ? const Size(double.infinity, 48) : null,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         ),
-        child: const Text('EXECUTE SELL', style: TextStyle(fontWeight: FontWeight.bold)),
+        child: const Text('매도 실행', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
     ];
 
@@ -365,16 +372,16 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     final qtyController = TextEditingController(text: '1');
     showDialog(context: context, builder: (context) => AlertDialog(
       backgroundColor: const Color(0xFF0F172A),
-      title: Text('$side ${widget.symbol}', style: const TextStyle(fontWeight: FontWeight.bold)),
-      content: TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Quantity')),
+      title: Text('${side == 'BUY' ? '매수' : '매도'} ${widget.symbol}', style: const TextStyle(fontWeight: FontWeight.bold)),
+      content: TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '수량')),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
         ElevatedButton(onPressed: () async {
           final qty = double.tryParse(qtyController.text) ?? 0;
           Navigator.pop(context);
           final res = await _apiService.placeOrder(widget.symbol, qty, side);
           if (res != null) _fetchInitialData();
-        }, child: const Text('CONFIRM')),
+        }, child: const Text('확인')),
       ],
     ));
   }
@@ -382,9 +389,9 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   void _showSourcesDialog(List sources) {
     showDialog(context: context, builder: (context) => AlertDialog(
       backgroundColor: const Color(0xFF0F172A),
-      title: const Text('RAW DATA SOURCES'),
+      title: const Text('분석 원본 뉴스'),
       content: SizedBox(width: 500, child: ListView.separated(shrinkWrap: true, itemCount: sources.length, separatorBuilder: (_, __) => const Divider(color: Colors.white10), itemBuilder: (ctx, i) => Text('- ${sources[i]}', style: const TextStyle(fontSize: 12)))),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('CLOSE'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('닫기'))],
     ));
   }
 
@@ -408,7 +415,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
       const SizedBox(height: 8),
       Text(_sentiment!['error'].toString(), style: const TextStyle(color: Colors.grey, fontSize: 12), textAlign: TextAlign.center),
       const SizedBox(height: 16),
-      TextButton(onPressed: () => _runAnalysis(force: true), child: const Text('RETRY ANALYTICS')),
+      TextButton(onPressed: () => _runAnalysis(force: true), child: const Text('분석 재시도')),
     ]);
   }
 }

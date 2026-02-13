@@ -50,12 +50,23 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const Icon(Icons.auto_graph, color: Colors.cyanAccent, size: 64),
                 const SizedBox(height: 24),
-                const Text('NASDAQ IS GOD', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 4)),
-                const Text('QUANT TERMINAL v2.0', style: TextStyle(fontSize: 10, color: Colors.grey, letterSpacing: 2)),
+                const Text('나스닥의 신', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 4)),
+                const Text('퀀트 터미널 v2.0', style: TextStyle(fontSize: 10, color: Colors.grey, letterSpacing: 2)),
                 const SizedBox(height: 48),
-                _buildField('IDENTITY', _usernameController, false),
+                _buildField(
+                  '아이디',
+                  _usernameController,
+                  false,
+                  action: TextInputAction.next,
+                ),
                 const SizedBox(height: 24),
-                _buildField('ACCESS KEY', _passwordController, true),
+                _buildField(
+                  '비밀번호',
+                  _passwordController,
+                  true,
+                  action: TextInputAction.done,
+                  onSubmitted: (_) => _handleLogin(),
+                ),
                 const SizedBox(height: 48),
                 SizedBox(
                   width: double.infinity,
@@ -67,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     child: _isLoading 
                       ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('AUTHORIZE ACCESS', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                      : const Text('로그인', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
                   ),
                 ),
               ],
@@ -78,13 +89,15 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController ctrl, bool secret) {
+  Widget _buildField(String label, TextEditingController ctrl, bool secret, {TextInputAction? action, Function(String)? onSubmitted}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1)),
       const SizedBox(height: 8),
       TextField(
         controller: ctrl,
         obscureText: secret,
+        textInputAction: action,
+        onSubmitted: onSubmitted,
         style: const TextStyle(fontFamily: 'monospace', color: Colors.white),
         decoration: InputDecoration(
           filled: true,

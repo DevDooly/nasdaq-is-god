@@ -39,14 +39,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Add Gemini API Key', style: TextStyle(color: Colors.white)),
+        title: const Text('Gemini API 키 추가', style: TextStyle(color: Colors.white)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: labelController,
               style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(labelText: 'Label (e.g. My Key 1)', labelStyle: TextStyle(color: Colors.grey)),
+              decoration: const InputDecoration(labelText: '라벨 (예: 키 1)', labelStyle: TextStyle(color: Colors.grey)),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -58,7 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
           ElevatedButton(
             onPressed: () async {
               if (labelController.text.isNotEmpty && keyController.text.isNotEmpty) {
@@ -69,7 +69,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 }
               }
             },
-            child: const Text('Add Key'),
+            child: const Text('키 추가'),
           )
         ],
       ),
@@ -79,7 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: const Text('설정')),
       backgroundColor: const Color(0xFF0F172A),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -88,10 +88,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('AI API Key Management', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const Text('AI API 키 관리', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 8),
                   const Text(
-                    'Register multiple keys to avoid quota limits. The active key will be used for all AI analysis.',
+                    '할당량 제한을 피하기 위해 여러 키를 등록할 수 있습니다. 활성화된 키가 모든 AI 분석에 사용됩니다.',
                     style: TextStyle(color: Colors.grey, fontSize: 13),
                   ),
                   const SizedBox(height: 24),
@@ -113,7 +113,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddKeyDialog,
         icon: const Icon(Icons.add),
-        label: const Text('Add New Key'),
+        label: const Text('새 키 추가'),
         backgroundColor: Colors.blueAccent,
       ),
     );
@@ -126,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Icon(Icons.vpn_key_outlined, size: 64, color: Colors.grey[700]),
           const SizedBox(height: 16),
-          const Text('No API keys registered yet.', style: TextStyle(color: Colors.grey)),
+          const Text('등록된 API 키가 없습니다.', style: TextStyle(color: Colors.grey)),
         ],
       ),
     );
@@ -136,7 +136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final bool isActive = key['is_active'] ?? false;
     final lastUsed = key['last_used_at'] != null 
         ? DateFormat('MM/dd HH:mm').format(DateTime.parse(key['last_used_at']))
-        : 'Never';
+        : '기록 없음';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -159,7 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(color: Colors.blueAccent, borderRadius: BorderRadius.circular(4)),
-                        child: const Text('ACTIVE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                        child: const Text('활성', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                       )
                     ]
                   ],
@@ -169,9 +169,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    _buildInfoBadge(Icons.analytics_outlined, 'Used: ${key['usage_count']}'),
+                    _buildInfoBadge(Icons.analytics_outlined, '사용: ${key['usage_count']}회'),
                     const SizedBox(width: 12),
-                    _buildInfoBadge(Icons.access_time, 'Last: $lastUsed'),
+                    _buildInfoBadge(Icons.access_time, '최근: $lastUsed'),
                   ],
                 )
               ],
@@ -221,11 +221,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Delete API Key?'),
-        content: const Text('This action cannot be undone.'),
+        title: const Text('API 키를 삭제하시겠습니까?'),
+        content: const Text('이 작업은 되돌릴 수 없습니다.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.redAccent))),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('삭제', style: TextStyle(color: Colors.redAccent))),
         ],
       ),
     );

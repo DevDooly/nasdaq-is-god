@@ -215,12 +215,46 @@ async def list_ai_models(current_user: User = Depends(get_current_user), session
 
 @app.get("/market/sentiment")
 async def get_market_sentiment():
-    tickers = ["^IXIC", "^GSPC", "NVDA", "AAPL", "MSFT"]
-    results = await asyncio.gather(*[get_stock_news(t) for t in tickers])
-    all_news = []
-    for news_list in results: all_news.extend(news_list)
-    unique_news = sorted({n['uuid']: n for n in all_news}.values(), key=lambda x: x.get('providerPublishTime', 0), reverse=True)
-    return await ai_service.analyze_market_outlook(list(unique_news))
+    try:
+        tickers = ["^IXIC", "^GSPC", "NVDA", "AAPL", "MSFT"]
+        results = await asyncio.gather(*[get_stock_news(t) for t in tickers])
+        all_news = []
+        for news_list in results:
+            if news_list:
+                all_news.extend(news_list)
+        
+        # 뉴스 구조 처리 (yfinance 최신 버전 호환성)
+        extracted_news = []
+        for n in all_news:
+            if not n: continue
+            title = n.get('title')
+            uuid = n.get('uuid') or n.get('id')
+            pub_time = n.get('providerPublishTime', 0)
+            
+            # 신규 구조 handling
+            if 'content' in n and isinstance(n['content'], dict):
+                content = n['content']
+                title = title or content.get('title')
+                pub_time = pub_time or content.get('pubDate') or 0
+            
+            if title and uuid:
+                extracted_news.append({
+                    'uuid': uuid,
+                    'title': title,
+                    'providerPublishTime': pub_time
+                })
+
+        unique_news = sorted(
+            {n['uuid']: n for n in extracted_news}.values(),
+            key=lambda x: x.get('providerPublishTime', 0),
+            reverse=True
+        )
+        return await ai_service.analyze_market_outlook(list(unique_news))
+    except Exception as e:
+        logger.error(f"Market sentiment error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {"error": str(e)}
 
 # --- Common ---
 @app.get("/users/me", response_model=UserRead)

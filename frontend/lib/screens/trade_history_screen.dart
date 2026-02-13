@@ -35,12 +35,12 @@ class _TradeHistoryScreenState extends State<TradeHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Trade History')),
+      appBar: AppBar(title: const Text('거래 내역')),
       backgroundColor: const Color(0xFF0F172A),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _history == null || _history!.isEmpty
-              ? const Center(child: Text('No trades found', style: TextStyle(color: Colors.grey)))
+              ? const Center(child: Text('거래 내역이 없습니다', style: TextStyle(color: Colors.grey)))
               : ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: _history!.length,
@@ -58,7 +58,7 @@ class _TradeHistoryScreenState extends State<TradeHistoryScreen> {
                         ),
                       ),
                       title: Text(
-                        '${log.symbol} · ${log.side}',
+                        '${log.symbol} · ${isBuy ? '매수' : '매도'}',
                         style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
                       ),
                       subtitle: Text(
@@ -74,7 +74,7 @@ class _TradeHistoryScreenState extends State<TradeHistoryScreen> {
                             style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                           Text(
-                            '${log.quantity} shares @ \$${log.price.toStringAsFixed(2)}',
+                            '${log.quantity} 주 @ \$${log.price.toStringAsFixed(2)}',
                             style: const TextStyle(fontSize: 11, color: Colors.grey),
                           ),
                         ],
