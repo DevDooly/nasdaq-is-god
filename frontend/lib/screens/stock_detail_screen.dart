@@ -292,6 +292,21 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     if (_data == null || _data!.history.isEmpty) return const Center(child: Text('데이터 없음'));
     List<FlSpot> spots = _data!.history.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.price)).toList();
     return LineChart(LineChartData(
+      lineTouchData: LineTouchData(
+        touchTooltipData: LineTouchTooltipData(
+          tooltipBgColor: const Color(0xFF1E293B),
+          getTooltipItems: (List<LineBarSpot> touchedSpots) {
+            return touchedSpots.map((LineBarSpot touchedSpot) {
+              final dateStr = _data!.history[touchedSpot.x.toInt()].date;
+              final date = DateTime.parse(dateStr).toLocal();
+              return LineTooltipItem(
+                '${DateFormat('MM/dd HH:mm').format(date)}\n\$${NumberFormat('#,##0.00').format(touchedSpot.y)}',
+                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10),
+              );
+            }).toList();
+          },
+        ),
+      ),
       gridData: FlGridData(
         show: true,
         drawVerticalLine: true,
@@ -299,7 +314,42 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
         getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
         getDrawingVerticalLine: (value) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
       ),
-      titlesData: const FlTitlesData(show: false),
+      titlesData: FlTitlesData(
+        show: true,
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 30,
+            interval: (_data!.history.length / 5).clamp(1, double.infinity),
+            getTitlesWidget: (value, meta) {
+              int index = value.toInt();
+              if (index < 0 || index >= _data!.history.length) return const SizedBox();
+              DateTime date = DateTime.parse(_data!.history[index].date).toLocal();
+              return Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(DateFormat('MM/dd').format(date), style: TextStyle(color: Colors.grey[600], fontSize: 10)),
+              );
+            },
+          ),
+        ),
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 50,
+            getTitlesWidget: (value, meta) {
+              return SideTitleWidget(
+                axisSide: meta.axisSide,
+                child: Text(
+                  NumberFormat('#,###').format(value),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 9),
+                ),
+              );
+            },
+          ),
+        ),
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+      ),
       borderData: FlBorderData(show: false),
       lineBarsData: [
         LineChartBarData(
