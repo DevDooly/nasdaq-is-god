@@ -40,7 +40,9 @@ async def purchase_and_notify():
             )
             if trade_res.status_code == 200:
                 data = trade_res.json()
-                results.append(f"✅ {symbol}: 10주 매수 성공 (${data.get('price', 'N/A')})")
+                price = data.get('price')
+                price_str = f"${price:,.2f}" if price is not None else "N/A"
+                results.append(f"✅ {symbol}: 10주 매수 성공 ({price_str})")
             else:
                 results.append(f"❌ {symbol}: 매수 실패 ({trade_res.text})")
         
