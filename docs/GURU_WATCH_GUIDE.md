@@ -34,25 +34,44 @@ WEBHOOK_SECRET=your_custom_secret_key_here
 
 ---
 
-## 3. 외부 브릿지 연동 (Pipedream 기준)
+## 3. 외부 브릿지 연동 (Pipedream 상세 가이드)
 
-가장 권장하는 방식인 **Pipedream** 연동 방법입니다.
+트위터(X)의 새 글을 실시간으로 감지하여 우리 서버로 전달해주는 **Pipedream** 설정 방법입니다.
 
-1.  **Trigger 생성**: `X (Twitter) - New Tweet From User` 선택.
-    - 추적할 계정 입력 (예: `elonmusk`, `realDonaldTrump`).
-2.  **Action 추가**: `HTTP Request` 선택.
-    - **Method**: `POST`
-    - **URL**: `http://your-server-ip:9000/webhook/guru-alpha`
-    - **Headers**: 
-        - `X-Alpha-Secret`: `.env`에 설정한 `WEBHOOK_SECRET` 값
-    - **Body (JSON)**:
-        ```json
-        {
-          "handle": "@{{steps.trigger.event.user.screen_name}}",
-          "text": "{{steps.trigger.event.full_text}}",
-          "url": "https://twitter.com/i/web/status/{{steps.trigger.event.id_str}}"
-        }
-        ```
+### Step 1: Pipedream 워크플로우 생성
+1. [Pipedream](https://pipedream.com/)에 로그인합니다.
+2. 상단 **[New Workflow]** 버튼을 클릭합니다.
+
+### Step 2: Trigger (Twitter/X) 설정
+1. 검색창에 `X` 또는 `Twitter`를 입력하고 **[New Tweet from User]**를 선택합니다.
+2. **X Account**: 자신의 X 계정을 연동합니다 (OAuth 인증).
+3. **Screen Name**: 추적할 인물의 아이디를 입력합니다 (예: `elonmusk`). 
+   *   *팁: 여러 명을 추적하려면 워크플로우를 각각 만들거나, `New Tweet from Search` 트리거를 사용하여 `from:elonmusk OR from:realDonaldTrump` 쿼리를 사용하세요.*
+4. **Ignore Retweets**: `True`로 설정하여 본인의 순수 발언만 필터링하는 것을 권장합니다.
+5. **[Create Source]**를 클릭하여 트리거를 활성화합니다.
+
+### Step 3: Action (HTTP Request) 추가
+1. 트리거 아래의 **[+]** 아이콘을 클릭하여 새 단계를 추가합니다.
+2. `HTTP`를 검색하여 **[Send Any HTTP Request]**를 선택합니다.
+3. 다음과 같이 세부 정보를 입력합니다:
+   - **Method**: `POST`
+   - **URL**: `http://your-server-ip:9000/webhook/guru-alpha` (사장님의 서버 공인 IP 또는 도메인)
+   - **Headers**:
+     - `X-Alpha-Secret`: `.env`에 설정한 `WEBHOOK_SECRET` 값을 입력합니다. (예: `your_super_secret_key`)
+     - `Content-Type`: `application/json`
+   - **Body (JSON)**: 우측의 아이콘을 눌러 `{{ }}` 형식의 변수를 삽입하거나 아래 코드를 복사해서 붙여넣으세요.
+     ```json
+     {
+       "handle": "@{{steps.trigger.event.user.screen_name}}",
+       "text": "{{steps.trigger.event.full_text}}",
+       "url": "https://twitter.com/i/web/status/{{steps.trigger.event.id_str}}"
+     }
+     ```
+
+### Step 4: 테스트 및 배포 (Deploy)
+1. **[Test]** 버튼을 눌러 실제 데이터가 사장님의 서버로 전송되는지 확인합니다.
+2. 서버 로그(`api_server.log`)에 `⚡ [REAL-TIME] Analyzing post...` 메시지가 뜨면 성공입니다.
+3. 우측 상단의 **[Deploy]**를 눌러 워크플로우를 실시간 가동합니다.
 
 ---
 
