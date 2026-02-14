@@ -20,7 +20,7 @@ class _GuruScreenState extends State<GuruScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _fetchData();
     _tabController.addListener(() {
       if (mounted) setState(() {});
@@ -56,6 +56,7 @@ class _GuruScreenState extends State<GuruScreen> with SingleTickerProviderStateM
           unselectedLabelColor: Colors.grey,
           tabs: const [
             Tab(text: 'WATCH TIMELINE'),
+            Tab(text: 'HISTORICAL ARCHIVE'),
             Tab(text: 'DIRECTORY & IMPACT'),
           ],
         ),
@@ -66,6 +67,7 @@ class _GuruScreenState extends State<GuruScreen> with SingleTickerProviderStateM
             controller: _tabController,
             children: [
               _buildTimelineTab(),
+              _buildArchiveTab(),
               _buildDirectoryTab(),
             ],
           ),
@@ -124,6 +126,15 @@ class _GuruScreenState extends State<GuruScreen> with SingleTickerProviderStateM
                   ],
                 ),
                 const SizedBox(height: 16),
+                if (insight['price_at_timestamp'] != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.cyanAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                      child: Text('PRICE AT STATEMENT: \$${insight['price_at_timestamp']}', style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'monospace')),
+                    ),
+                  ),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
@@ -153,6 +164,89 @@ class _GuruScreenState extends State<GuruScreen> with SingleTickerProviderStateM
         },
       ),
     );
+  }
+
+  Widget _buildArchiveTab() {
+    // 날짜별로 그룹화
+    Map<String, List<dynamic>> grouped = {};
+    for (var item in _insights) {
+      String date = DateFormat('yyyy-MM-dd').format(DateTime.parse(item['insight']['timestamp']));
+      grouped.putIfAbsent(date, () => []).add(item);
+    }
+    var sortedDates = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    if (grouped.isEmpty) return const Center(child: Text('No historical data', style: TextStyle(color: Colors.grey)));
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(24),
+      itemCount: sortedDates.length,
+      itemBuilder: (context, index) {
+        String date = sortedDates[index];
+        List<dynamic> dayInsights = grouped[date]!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(date, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purpleAccent)),
+            ),
+            ...dayInsights.map((item) {
+              final insight = item['insight'];
+              return Card(
+                color: Colors.white.withOpacity(0.03),
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: _buildSentimentIcon(insight['sentiment']),
+                  title: Text(insight['content'], maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                  subtitle: Text('${item['guru_name']} · \$${insight['price_at_timestamp'] ?? 'N/A'}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  trailing: Text('${insight['score']}', style: TextStyle(color: _getScoreColor(insight['score']), fontWeight: FontWeight.bold)),
+                  onTap: () => _showInsightDetail(item),
+                ),
+              );
+            }).toList(),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSentimentIcon(String sentiment) {
+    if (sentiment == 'Bullish') return const Icon(Icons.trending_up, color: Colors.greenAccent, size: 20);
+    if (sentiment == 'Bearish') return const Icon(Icons.trending_down, color: Colors.redAccent, size: 20);
+    return const Icon(Icons.trending_flat, color: Colors.grey, size: 20);
+  }
+
+  void _showInsightDetail(dynamic item) {
+    final insight = item['insight'];
+    showDialog(context: context, builder: (context) => AlertDialog(
+      backgroundColor: const Color(0xFF0F172A),
+      title: Text(item['guru_name']),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(insight['content'], style: const TextStyle(fontStyle: FontStyle.italic)),
+            const Divider(height: 32, color: Colors.white10),
+            Text('SUMMARY: ${insight['summary']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.purpleAccent)),
+            const SizedBox(height: 8),
+            Text('REASON: ${insight['reason']}', style: const TextStyle(fontSize: 13, color: Colors.white70)),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.cyanAccent.withOpacity(0.05), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.cyanAccent.withOpacity(0.2))),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('PRICE AT TIME', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                  Text('\$${insight['price_at_timestamp'] ?? 'N/A'}', style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('CLOSE'))],
+    ));
   }
 
   Widget _buildDirectoryTab() {

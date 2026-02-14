@@ -112,6 +112,11 @@ class GuruInsight(SQLModel, table=True):
     reason: str
     timestamp: datetime = Field(default_factory=datetime.utcnow, index=True)
     source_url: Optional[str] = None
+    
+    # 💡 시장 영향력 분석용 데이터 (추가)
+    price_at_timestamp: Optional[float] = None # 발언 당시 주가
+    price_after_1h: Optional[float] = None     # 1시간 후 주가 (사후 분석용)
+    impact_confirmed: bool = Field(default=False) # 실제 주가에 영향을 줬는지 여부
 
 # 💡 API 키 관리 테이블
 class APIKeyConfig(SQLModel, table=True):
