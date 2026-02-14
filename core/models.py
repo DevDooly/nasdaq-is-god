@@ -99,6 +99,7 @@ class Guru(SQLModel, table=True):
     influence_score: int = Field(default=50) # 중요도 (1~100)
     target_symbols: str = Field(default="") # 관련 종목 (예: "TSLA,NVDA")
     is_active: bool = Field(default=True)
+    is_auto_trade_enabled: bool = Field(default=False) # 💡 자동 매매 권한 부여 여부
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class GuruInsight(SQLModel, table=True):

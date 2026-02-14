@@ -311,6 +311,77 @@ async def analyze_guru_statement(guru_id: int, content: str, current_user: User 
     await session.commit()
     return insight
 
+# 💡 실시간 소셜 Webhook 수신기
+@app.post("/webhook/guru-alpha")
+async def guru_alpha_webhook(request: Request, session: AsyncSession = Depends(get_session)):
+    # 1. 보안 인증
+    secret = request.headers.get("X-Alpha-Secret")
+    if secret != os.getenv("WEBHOOK_SECRET"):
+        raise HTTPException(status_code=403, detail="Invalid Secret")
+
+    # 2. 데이터 파싱
+    data = await request.json()
+    handle = data.get("handle") # 예: @elonmusk
+    content = data.get("text")
+    source_url = data.get("url")
+
+    if not handle or not content:
+        raise HTTPException(status_code=400, detail="Missing data")
+
+    # 3. 구루 식별
+    guru = (await session.execute(select(Guru).where(Guru.handle == handle))).scalar_one_or_none()
+    if not guru or not guru.is_active:
+        return {"status": "ignored", "reason": "Guru not found or inactive"}
+
+    # 4. 즉시 AI 분석
+    logger.info(f"⚡ [REAL-TIME] Analyzing post from {guru.name}...")
+    analysis = await ai_service.analyze_social_impact(guru.name, content, target_symbols=guru.target_symbols)
+    
+    # 5. 가격 스냅샷
+    current_price = None
+    target_symbol = analysis.get("main_symbol") or (guru.target_symbols.split(",")[0] if guru.target_symbols else None)
+    if target_symbol:
+        try:
+            p_data = await get_stock_info(target_symbol)
+            current_price = p_data.get("currentPrice")
+        except: pass
+
+    # 6. DB 저장
+    insight = GuruInsight(
+        guru_id=guru.id, content=content,
+        sentiment=analysis["sentiment"], score=analysis["score"],
+        summary=analysis["summary"], reason=analysis["reason"],
+        symbol=target_symbol, source_url=source_url,
+        price_at_timestamp=current_price
+    )
+    session.add(insight)
+    
+    # 7. 🚨 [CRITICAL] 자동 매매 로직 연동
+    execution_result = None
+    if guru.is_auto_trade_enabled:
+        # 임계치 설정: Bullish 90점 이상 또는 Bearish 10점 이하
+        if analysis["score"] >= 90 or analysis["score"] <= 10:
+            side = "BUY" if analysis["score"] >= 90 else "SELL"
+            quantity = 1.0 
+            # admin 사용자 계정으로 우선 실행 (데모용)
+            admin = (await session.execute(select(User).where(User.username == "admin"))).scalar_one_or_none()
+            if admin and admin.is_auto_trading_enabled:
+                execution_result = await trade_service.execute_trade(session, admin, target_symbol, quantity, side)
+                logger.info(f"🔥 [AUTO-EXECUTE] {side} {target_symbol} due to Guru Alpha!")
+
+    await session.commit()
+
+    # 8. 실시간 알림 전송
+    alert_msg = {
+        "title": f"📢 GURU ALPHA: {guru.name}",
+        "body": f"[{analysis['sentiment']}] {analysis['summary']}\nScore: {analysis['score']}\nPrice: ${current_price}\nAuto-Trade: {'SUCCESS' if execution_result and 'status' in execution_result else 'OFF'}"
+    }
+    await notification_service.broadcast({"type": "notification", "data": alert_msg})
+    # 텔레그램은 1번 사용자(admin)에게 전송
+    await notification_service.notify_user(1, alert_msg)
+
+    return {"status": "processed", "analysis": analysis, "execution": execution_result}
+
 # --- Common ---
 @app.get("/users/me", response_model=UserRead)
 async def read_users_me(current_user: User = Depends(get_current_user)): return current_user
