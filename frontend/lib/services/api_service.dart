@@ -99,7 +99,14 @@ class ApiService {
 
   Future<bool> addApiKey(String label, String key) async {
     try {
-      final response = await _dio.post('/settings/api-keys', queryParameters: {'label': label, 'key': key});
+      final response = await _dio.post('/settings/api-keys', data: {'label': label, 'key': key});
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
+  Future<bool> addApiKeyFromMap(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post('/settings/api-keys', data: data);
       return response.statusCode == 200;
     } catch (e) { return false; }
   }

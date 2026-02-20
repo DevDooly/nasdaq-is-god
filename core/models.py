@@ -123,9 +123,10 @@ class GuruInsight(SQLModel, table=True):
 class APIKeyConfig(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id")
-    provider: str = Field(default="Gemini")
+    provider: str = Field(default="GOOGLE") # GOOGLE, OPENAI, CLAUDE, OLLAMA
     label: str
-    key_value: str # 실제 API 키 (저장 시 마스킹 또는 암호화 고려)
+    key_value: Optional[str] = None # Ollama는 필요 없을 수 있음
+    base_url: Optional[str] = None  # Ollama용 IP:Port (예: http://192.168.0.10:11434)
     is_active: bool = Field(default=False)
     usage_count: int = Field(default=0)
     last_used_at: Optional[datetime] = None

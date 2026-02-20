@@ -142,13 +142,23 @@ async def signup(user_data: UserCreate, session: AsyncSession = Depends(get_sess
 async def list_api_keys(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     statement = select(APIKeyConfig).where(APIKeyConfig.user_id == current_user.id).order_by(APIKeyConfig.created_at.desc())
     keys = (await session.execute(statement)).scalars().all()
-    return [{**k.dict(), "key_value": f"{k.key_value[:4]}...{k.key_value[-4:]}"} for k in keys]
+    # 키 값 마스킹 처리 (Ollama는 키가 없을 수 있음)
+    return [{**k.dict(), "key_value": f"{k.key_value[:4]}...{k.key_value[-4:]}" if k.key_value else "N/A"} for k in keys]
 
 @app.post("/settings/api-keys")
-async def add_api_key(label: str, key: str, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+async def add_api_key(data: Dict[str, Any], current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    # data 예시: { "provider": "OLLAMA", "label": "My PC", "base_url": "http://192.168.0.10:11434", "key": "" }
     statement = select(APIKeyConfig).where(APIKeyConfig.user_id == current_user.id)
     is_first = (await session.execute(statement)).first() is None
-    new_key = APIKeyConfig(user_id=current_user.id, label=label, key_value=key, is_active=is_first)
+    
+    new_key = APIKeyConfig(
+        user_id=current_user.id,
+        provider=data.get("provider", "GOOGLE").upper(),
+        label=data.get("label"),
+        key_value=data.get("key"),
+        base_url=data.get("base_url"),
+        is_active=is_first
+    )
     session.add(new_key)
     await session.commit()
     return {"status": "success"}
