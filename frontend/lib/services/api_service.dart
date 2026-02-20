@@ -125,6 +125,13 @@ class ApiService {
     } catch (e) { return false; }
   }
 
+  Future<bool> checkApiKeyHealth(int id) async {
+    try {
+      final response = await _dio.get('/settings/api-keys/$id/check-health');
+      return response.data['healthy'] ?? false;
+    } catch (e) { return false; }
+  }
+
   // 💡 AI 서비스 관련
   Future<List<dynamic>?> getAiModels() async {
     try {

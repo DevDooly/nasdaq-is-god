@@ -180,6 +180,18 @@ async def delete_api_key(key_id: int, current_user: User = Depends(get_current_u
     await session.commit()
     return {"status": "success"}
 
+@app.get("/settings/api-keys/{key_id}/check-health")
+async def check_api_key_health(key_id: int, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    target = (await session.execute(select(APIKeyConfig).where(APIKeyConfig.id == key_id, APIKeyConfig.user_id == current_user.id))).scalar_one_or_none()
+    if not target: raise HTTPException(status_code=404)
+    
+    is_healthy = await ai_service.check_provider_health(
+        target.provider, 
+        base_url=target.base_url, 
+        api_key=target.key_value
+    )
+    return {"status": "ok" if is_healthy else "error", "healthy": is_healthy}
+
 # --- AI Sentiment ---
 @app.get("/stock/{symbol}/sentiment")
 async def get_stock_sentiment(

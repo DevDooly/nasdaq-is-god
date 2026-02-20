@@ -134,3 +134,21 @@ class AIService:
             self._market_cache = result
             self._market_cache_time = current_time
         return result
+
+    async def check_provider_health(self, provider: str, base_url: Optional[str] = None, api_key: Optional[str] = None) -> bool:
+        """AI 프로바이더의 연결 상태를 확인합니다."""
+        try:
+            if provider.upper() == "OLLAMA":
+                if not base_url: return False
+                if not base_url.startswith("http"): base_url = f"http://{base_url}"
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    response = await client.get(f"{base_url}/")
+                    return response.status_code == 200
+            elif provider.upper() == "GOOGLE":
+                # 단순 라이브러리 설정 체크
+                return api_key is not None and len(api_key) > 10
+            # OpenAI 등 타 프로바이더 확장 가능
+            return True
+        except Exception as e:
+            logger.error(f"Health check failed for {provider}: {e}")
+            return False

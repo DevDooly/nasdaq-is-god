@@ -13,6 +13,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final ApiService _apiService = ApiService();
   List<dynamic>? _apiKeys;
   bool _isLoading = true;
+  final Map<int, bool?> _healthStatus = {}; // key_id -> health (true: ok, false: error, null: checking)
 
   @override
   void initState() {
@@ -28,6 +29,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _apiKeys = keys;
         _isLoading = false;
       });
+      // 초기 헬스체크 수행
+      if (keys != null) {
+        for (var k in keys) {
+          _checkHealth(k['id']);
+        }
+      }
+    }
+  }
+
+  Future<void> _checkHealth(int id) async {
+    setState(() => _healthStatus[id] = null); // Loading
+    final isHealthy = await _apiService.checkApiKeyHealth(id);
+    if (mounted) {
+      setState(() => _healthStatus[id] = isHealthy);
     }
   }
 
@@ -163,8 +178,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildKeyCard(dynamic key) {
+    final int id = key['id'];
     final bool isActive = key['is_active'] ?? false;
     final provider = key['provider'] ?? 'GOOGLE';
+    final bool? isHealthy = _healthStatus[id];
     final lastUsed = key['last_used_at'] != null 
         ? DateFormat('MM/dd HH:mm').format(DateTime.parse(key['last_used_at']))
         : 'Never';
@@ -189,6 +206,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(key['label'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                     const SizedBox(width: 8),
                     _buildProviderBadge(provider),
+                    const SizedBox(width: 8),
+                    _buildHealthIndicator(id, isHealthy),
                     if (isActive) ...[
                       const SizedBox(width: 8),
                       const Icon(Icons.bolt, color: Colors.amberAccent, size: 16),
@@ -234,6 +253,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           )
         ],
+      ),
+    );
+  }
+
+  Widget _buildHealthIndicator(int id, bool? isHealthy) {
+    if (isHealthy == null) {
+      return const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey));
+    }
+    return InkWell(
+      onTap: () => _checkHealth(id),
+      child: Tooltip(
+        message: isHealthy ? 'Healthy - Click to recheck' : 'Error - Click to retry',
+        child: Container(
+          width: 12, height: 12,
+          decoration: BoxDecoration(
+            color: isHealthy ? Colors.greenAccent : Colors.redAccent,
+            shape: BoxShape.circle,
+            boxShadow: [BoxShadow(color: (isHealthy ? Colors.greenAccent : Colors.redAccent).withOpacity(0.5), blurRadius: 4)],
+          ),
+        ),
       ),
     );
   }
