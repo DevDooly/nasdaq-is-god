@@ -12,6 +12,9 @@ logger = logging.getLogger("ai_service")
 class AIService:
     def __init__(self):
         self.default_api_key = os.getenv("GEMINI_API_KEY")
+        self.ollama_base_url = os.getenv("OLLAMA_BASE_URL")
+        self.default_provider = os.getenv("DEFAULT_AI_PROVIDER", "GOOGLE").upper()
+
         if self.default_api_key and self.default_api_key != "your_gemini_api_key_here":
             genai.configure(api_key=self.default_api_key)
         
@@ -31,9 +34,13 @@ class AIService:
         # 1. 활성 설정 찾기
         active_config = next((c for c in api_configs if c['is_active']), None)
         if not active_config:
-            # 활성 설정 없으면 ENV의 Gemini 사용
-            if not self.default_api_key: return {"error": "No Active AI Config."}
-            active_config = {"provider": "GOOGLE", "key_value": self.default_api_key, "id": None, "label": "Default ENV"}
+            # 활성 설정 없으면 ENV의 설정 사용
+            if self.default_provider == "OLLAMA" and self.ollama_base_url:
+                active_config = {"provider": "OLLAMA", "base_url": self.ollama_base_url, "id": None, "label": "Default ENV (Ollama)"}
+            elif self.default_api_key:
+                active_config = {"provider": "GOOGLE", "key_value": self.default_api_key, "id": None, "label": "Default ENV (Google)"}
+            else:
+                return {"error": "No Active AI Config and no ENV defaults found."}
 
         provider = active_config.get("provider", "GOOGLE").upper()
         prompt = self._build_sentiment_prompt(f"주식 종목 '{symbol}'", news_list)
@@ -111,16 +118,21 @@ class AIService:
         return {"error": "OpenAI driver not implemented yet"}
 
     async def analyze_social_impact(self, guru_name: str, content: str, target_symbols: str = "", model_name: str = "models/gemini-2.0-flash") -> Dict[str, Any]:
-        # 💡 Webhook 등에서 호출되는 소셜 분석도 멀티 프로바이더 적용이 필요함
-        # 우선 기존 로직 유지하되 Gemini API Key 로드 방식만 보정
+        """영향력 있는 인물의 발언을 분석합니다. (ENV 기본 설정 사용)"""
         prompt = f"""
         당신은 월스트리트의 시니어 퀀트 애널리스트입니다. 
         시장 영향력이 큰 인물 '{guru_name}'의 최근 발언을 분석하여 주식 시장에 미칠 파급력을 평가하십시오.
         [발언 원문]: "{content}"
         형식 JSON: {{ "score": 0~100, "sentiment": "Bullish|Bearish|Neutral", "summary": "요약", "reason": "이유", "main_symbol": "티커" }}
         """
-        # 여기도 위 드라이버 구조를 타게 할 수 있음 (리팩토링 대상)
-        return await self._call_google(self.default_api_key, model_name, prompt)
+        
+        try:
+            if self.default_provider == "OLLAMA" and self.ollama_base_url:
+                return await self._call_ollama(self.ollama_base_url, model_name, prompt)
+            return await self._call_google(self.default_api_key, model_name, prompt)
+        except Exception as e:
+            logger.error(f"Social analysis error: {e}")
+            return {"score": 50, "sentiment": "Neutral", "summary": "분석 오류", "reason": str(e)}
 
     async def analyze_market_outlook(self, news_list: List[Dict[str, Any]], model_name: str = "models/gemini-2.0-flash") -> Dict[str, Any]:
         current_time = time.time()
@@ -128,12 +140,19 @@ class AIService:
             return self._market_cache
         
         prompt = self._build_sentiment_prompt("미국 주식 시장 전체", news_list)
-        result = await self._call_google(self.default_api_key, model_name, prompt)
         
-        if "error" not in result:
-            self._market_cache = result
-            self._market_cache_time = current_time
-        return result
+        try:
+            if self.default_provider == "OLLAMA" and self.ollama_base_url:
+                result = await self._call_ollama(self.ollama_base_url, model_name, prompt)
+            else:
+                result = await self._call_google(self.default_api_key, model_name, prompt)
+            
+            if "error" not in result:
+                self._market_cache = result
+                self._market_cache_time = current_time
+            return result
+        except Exception as e:
+            return {"error": str(e)}
 
     async def check_provider_health(self, provider: str, base_url: Optional[str] = None, api_key: Optional[str] = None) -> bool:
         """AI 프로바이더의 연결 상태를 확인합니다."""
