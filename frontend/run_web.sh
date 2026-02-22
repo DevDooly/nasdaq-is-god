@@ -29,7 +29,9 @@ fi
 
 # 3. 무조건 빌드 수행 (변경사항 즉시 반영)
 echo "📦 Running flutter build web..."
-$FLUTTER_BIN build web --release
+# 💡 빌드 캐시 정리를 위해 clean 수행 후 빌드 (아이콘 깨짐 방지)
+$FLUTTER_BIN clean
+$FLUTTER_BIN build web --release --no-tree-shake-icons
 
 # 4. 최적화된 Python 서버 실행 (Threading 지원)
 echo "🌐 Starting Threaded Web Server on port $PORT..."
