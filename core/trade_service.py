@@ -186,8 +186,10 @@ class TradeService:
         await session.commit()
         logger.info(f"💾 Saved equity snapshot for {user.username}: ${total_equity:.2f}")
 
-    async def get_equity_history(self, session: AsyncSession, user: User):
-        """사용자의 자산 변화 이력을 조회합니다."""
-        statement = select(EquitySnapshot).where(EquitySnapshot.user_id == user.id).order_by(EquitySnapshot.timestamp.asc())
+    async def get_equity_history(self, session: AsyncSession, user: User, limit: int = 100):
+        """사용자의 자산 변화 이력을 조회합니다. (최근 데이터 기준 제한)"""
+        # 최근 100개 데이터만 가져와서 다시 시간순(ASC)으로 정렬
+        statement = select(EquitySnapshot).where(EquitySnapshot.user_id == user.id).order_by(EquitySnapshot.timestamp.desc()).limit(limit)
         result = await session.execute(statement)
-        return result.scalars().all()
+        history = result.scalars().all()
+        return sorted(history, key=lambda x: x.timestamp)

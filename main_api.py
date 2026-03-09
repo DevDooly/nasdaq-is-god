@@ -232,8 +232,22 @@ async def get_stock_sentiment(
 
 @app.get("/ai/models")
 async def list_ai_models(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    # 1. 활성화된 DB 설정 확인
     config = (await session.execute(select(APIKeyConfig).where(APIKeyConfig.user_id == current_user.id, APIKeyConfig.is_active == True))).scalar_one_or_none()
-    return ai_service.list_available_models(api_key=config.key_value if config else None)
+    
+    if config:
+        return await ai_service.list_available_models(
+            api_key=config.key_value, 
+            provider=config.provider, 
+            base_url=config.base_url
+        )
+    
+    # 2. DB 설정 없으면 .env 기본값 사용
+    return await ai_service.list_available_models(
+        api_key=os.getenv("GEMINI_API_KEY"),
+        provider=os.getenv("DEFAULT_AI_PROVIDER", "GOOGLE"),
+        base_url=os.getenv("OLLAMA_BASE_URL")
+    )
 
 @app.get("/market/sentiment")
 async def get_market_sentiment():

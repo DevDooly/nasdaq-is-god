@@ -138,21 +138,95 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       slivers: [
                         _buildAppBar(),
                         SliverPadding(
-                          padding: const EdgeInsets.all(24),
-                          sliver: SliverList(
-                            delegate: SliverChildListDelegate([
-                              _buildTopRow(),
-                              const SizedBox(height: 24),
-                              _buildMainContent(),
-                            ]),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                          sliver: SliverToBoxAdapter(child: _buildTopRow()),
+                        ),
+                        SliverPadding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          sliver: SliverToBoxAdapter(child: _buildEquityCurveSection()),
+                        ),
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+                          sliver: SliverToBoxAdapter(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('포트폴리오 요약', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                TextButton.icon(
+                                  onPressed: _showLiquidationDialog, 
+                                  icon: const Icon(Icons.bolt, color: Colors.redAccent, size: 16), 
+                                  label: const Text('전량 매도', style: TextStyle(color: Colors.redAccent, fontSize: 13))
+                                ),
+                              ],
+                            ),
                           ),
                         ),
+                        SliverPadding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          sliver: _buildAssetSliverList(),
+                        ),
+                        const SliverToBoxAdapter(child: SizedBox(height: 100)),
                       ],
                     ),
                   ),
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildAssetSliverList() {
+    if (_portfolio == null || _portfolio!.isEmpty) {
+      return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(40), child: Text('포트폴리오가 비어 있습니다'))));
+    }
+
+    // 💡 성능을 위해 상위 8개 자산만 노출 (필요시 전체보기 지원)
+    final sortedPortfolio = List<StockAsset>.from(_portfolio!);
+    sortedPortfolio.sort((a, b) => (b.currentPrice * b.quantity).compareTo(a.currentPrice * a.quantity));
+    final displayList = sortedPortfolio.take(8).toList();
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          if (index == displayList.length) {
+            if (_portfolio!.length > 8) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: TextButton(
+                  onPressed: () { /* 나중에 전체 자산 페이지로 이동 */ }, 
+                  child: Text('+ ${_portfolio!.length - 8}개의 종목 더보기', style: const TextStyle(color: Colors.grey))
+                ),
+              );
+            }
+            return null;
+          }
+
+          final asset = displayList[index];
+          final curPrice = _livePrices[asset.symbol] ?? asset.currentPrice;
+          final profitRate = ((curPrice / asset.averagePrice) - 1) * 100;
+          final blinkColor = _priceBlinkColors[asset.symbol];
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: InkWell(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: asset.symbol))).then((_) => _fetchData()),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: _glassDecoration(color: blinkColor?.withOpacity(0.08)),
+                child: Row(children: [
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(asset.symbol, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text('${asset.quantity.toStringAsFixed(0)} 주', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                  ]),
+                  const Spacer(),
+                  _buildPriceColumn(curPrice, profitRate, blinkColor),
+                ]),
+              ),
+            ),
+          );
+        },
+        childCount: displayList.length + (_portfolio!.length > 8 ? 1 : 0),
+      ),
     );
   }
 
@@ -394,74 +468,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildMainContent() {
-    return LayoutBuilder(builder: (context, constraints) {
-      if (constraints.maxWidth > 1000) {
-        return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(flex: 3, child: _buildAssetSection()),
-          const SizedBox(width: 24),
-          Expanded(flex: 2, child: _buildEquityCurveSection()),
-        ]);
-      } else {
-        return Column(children: [
-          _buildEquityCurveSection(),
-          const SizedBox(height: 24),
-          _buildAssetSection(),
-        ]);
-      }
-    });
-  }
-
-  Widget _buildAssetSection() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        const Text('포트폴리오 현황', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        TextButton.icon(onPressed: _showLiquidationDialog, icon: const Icon(Icons.bolt, color: Colors.redAccent), label: const Text('전량 매도', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
-      ]),
-      const SizedBox(height: 16),
-      _buildAssetList(),
-    ]);
-  }
-
   Widget _buildEquityCurveSection() {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('자산 변동 추이', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
       const SizedBox(height: 16),
       Container(padding: const EdgeInsets.all(20), decoration: _glassDecoration(), child: _buildEquityChart()),
     ]);
-  }
-
-  Widget _buildAssetList() {
-    if (_portfolio == null || _portfolio!.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('포트폴리오가 비어 있습니다')));
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _portfolio!.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final asset = _portfolio![index];
-        final curPrice = _livePrices[asset.symbol] ?? asset.currentPrice;
-        final blinkColor = _priceBlinkColors[asset.symbol];
-        final profitRate = ((curPrice / asset.averagePrice) - 1) * 100;
-
-        return InkWell(
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => StockDetailScreen(symbol: asset.symbol))).then((_) => _fetchData()),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            decoration: _glassDecoration(color: blinkColor?.withOpacity(0.1)),
-            child: Row(children: [
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(asset.symbol, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('${asset.quantity} 주', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              ]),
-              const Spacer(),
-              _buildPriceColumn(curPrice, profitRate, blinkColor),
-            ]),
-          ),
-        );
-      },
-    );
   }
 
   Widget _buildPriceColumn(double price, double rate, Color? blink) {
@@ -473,10 +485,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildEquityChart() {
     if (_equityHistory == null || _equityHistory!.isEmpty) return const SizedBox(height: 200, child: Center(child: Text('데이터 없음')));
+    
+    // 💡 차트 성능을 위해 최대 50개의 포인트로 샘플링
     List<FlSpot> spots = [];
-    for (int i = 0; i < _equityHistory!.length; i++) {
+    int skip = (_equityHistory!.length / 50).ceil();
+    if (skip < 1) skip = 1;
+    
+    for (int i = 0; i < _equityHistory!.length; i += skip) {
       spots.add(FlSpot(i.toDouble(), (_equityHistory![i]['total_equity'] as num).toDouble()));
     }
+    // 마지막 포인트는 반드시 포함
+    if (spots.isNotEmpty && spots.last.x != (_equityHistory!.length - 1).toDouble()) {
+        spots.add(FlSpot((_equityHistory!.length - 1).toDouble(), (_equityHistory!.last['total_equity'] as num).toDouble()));
+    }
+    
     return SizedBox(
       height: 250,
       child: LineChart(LineChartData(
@@ -497,7 +519,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           show: true,
           drawVerticalLine: true,
           horizontalInterval: 10000,
-          verticalInterval: 1,
+          verticalInterval: skip.toDouble() * 5,
           getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
           getDrawingVerticalLine: (value) => FlLine(color: Colors.white.withOpacity(0.05), strokeWidth: 1),
         ),
@@ -586,7 +608,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         final asset = _portfolio![index];
                         return CheckboxListTile(
                           title: Text(asset.symbol, style: const TextStyle(color: Colors.white)),
-                          subtitle: Text('${asset.quantity} 주', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          subtitle: Text('${asset.quantity.toStringAsFixed(0)} 주', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                           value: selectedSymbols.contains(asset.symbol),
                           onChanged: (val) {
                             setDialogState(() {

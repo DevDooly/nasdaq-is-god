@@ -4,6 +4,7 @@ import json
 import logging
 import time
 import httpx
+import asyncio
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -22,10 +23,29 @@ class AIService:
         self._market_cache_time = 0
         self.CACHE_DURATION = 1800 
 
-    def list_available_models(self, api_key: Optional[str] = None) -> List[Dict[str, str]]:
-        # 생략 (기존 로직 유지하되 필요 시 확장)
-        return [{"name": "models/gemini-2.0-flash", "display_name": "Gemini 2.0 Flash"},
-                {"name": "llama3", "display_name": "Ollama: Llama3"}]
+    async def list_available_models(self, api_key: Optional[str] = None, provider: str = "GOOGLE", base_url: Optional[str] = None) -> List[Dict[str, str]]:
+        """사용 가능한 모델 리스트를 반환합니다. (멀티 프로바이더 지원)"""
+        if provider.upper() == "OLLAMA" and base_url:
+            if not base_url.startswith("http"): base_url = f"http://{base_url}"
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    response = await client.get(f"{base_url}/api/tags")
+                    if response.status_code == 200:
+                        data = response.json()
+                        return [{"name": m["name"], "display_name": f"Ollama: {m['name']}"} for m in data.get("models", [])]
+            except Exception as e:
+                logger.error(f"Failed to fetch Ollama models: {e}")
+                return [{"name": "llama3", "display_name": "Ollama: Llama3 (Default)"}]
+
+        # 기본 Google Gemini 모델
+        key = api_key or self.default_api_key
+        if not key: return []
+        try:
+            # genai.list_models() is synchronous, wrapping in try-except for simplicity
+            return [{"name": "models/gemini-2.0-flash", "display_name": "Gemini 2.0 Flash"},
+                    {"name": "models/gemini-1.5-flash", "display_name": "Gemini 1.5 Flash"}]
+        except:
+            return [{"name": "models/gemini-2.0-flash", "display_name": "Gemini 2.0 Flash"}]
 
     async def analyze_sentiment_with_rotation(self, symbol: str, news_list: List[Dict[str, Any]], api_configs: List[Dict[str, Any]], model_name: str = "models/gemini-2.0-flash") -> Dict[str, Any]:
         """
@@ -142,8 +162,9 @@ class AIService:
         prompt = self._build_sentiment_prompt("미국 주식 시장 전체", news_list)
         
         try:
+            # 💡 설정된 기본 프로바이더(Ollama 또는 Google) 사용
             if self.default_provider == "OLLAMA" and self.ollama_base_url:
-                result = await self._call_ollama(self.ollama_base_url, model_name, prompt)
+                result = await self._call_ollama(self.ollama_base_url, "llama3", prompt)
             else:
                 result = await self._call_google(self.default_api_key, model_name, prompt)
             
@@ -152,6 +173,7 @@ class AIService:
                 self._market_cache_time = current_time
             return result
         except Exception as e:
+            logger.error(f"Market outlook error: {e}")
             return {"error": str(e)}
 
     async def check_provider_health(self, provider: str, base_url: Optional[str] = None, api_key: Optional[str] = None) -> bool:
