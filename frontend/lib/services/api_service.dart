@@ -70,6 +70,20 @@ class ApiService {
     } catch (e) { return null; }
   }
 
+  Future<bool> signup(String username, String email, String password) async {
+    try {
+      final response = await _dio.post('/signup', data: {
+        'username': username,
+        'email': email,
+        'password': password,
+      });
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      return false;
+    }
+  }
+
+
   Future<void> logout() async {
     _backupToken = null;
     if (kIsWeb) { try { html.window.localStorage.remove('jwt_token'); } catch (e) {} }

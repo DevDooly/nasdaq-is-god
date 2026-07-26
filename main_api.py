@@ -60,15 +60,33 @@ async def price_broadcaster():
             logger.error(f"Broadcaster error: {e}")
         await asyncio.sleep(10)
 
+async def ensure_default_user():
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with async_session() as session:
+        statement = select(User).where(User.username == "admin")
+        result = await session.execute(statement)
+        user = result.scalar_one_or_none()
+        if not user:
+            logger.info("🔐 기본 계정(admin)이 생성되어 있지 않아 자동으로 생성합니다.")
+            default_user = User(
+                username="admin",
+                email="admin@example.com",
+                hashed_password=get_password_hash("admin1234")
+            )
+            session.add(default_user)
+            await session.commit()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await ensure_default_user()
     worker_task = asyncio.create_task(trading_worker.start(interval_seconds=60))
     broadcaster_task = asyncio.create_task(price_broadcaster())
     yield
     trading_worker.stop()
     worker_task.cancel()
     broadcaster_task.cancel()
+
 
 app = FastAPI(title="Nasdaq is God API", lifespan=lifespan)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
