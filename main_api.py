@@ -60,116 +60,117 @@ async def price_broadcaster():
             logger.error(f"Broadcaster error: {e}")
         await asyncio.sleep(10)
 
-async def ensure_default_user():
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with async_session() as session:
-        statement = select(User).where(User.username == "admin")
-        result = await session.execute(statement)
-        user = result.scalar_one_or_none()
-        if not user:
-            logger.info("🔐 기본 계정(admin)이 생성되어 있지 않아 자동으로 생성합니다.")
-            default_user = User(
-                username="admin",
-                email="admin@example.com",
-                hashed_password=get_password_hash("admin1234")
-            )
-            session.add(default_user)
-            await session.commit()
-
-async def ensure_default_gurus():
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with async_session() as session:
-        statement = select(Guru)
-        existing_gurus = (await session.execute(statement)).scalars().all()
-        if not existing_gurus:
-            logger.info("🧠 AI 대가(Guru) 및 테스트 발언 데이터 시딩을 진행합니다.")
-            gurus_seed = [
-                Guru(name="Elon Musk", handle="@elonmusk", description="Tesla & xAI CEO", influence_score=95, target_symbols="TSLA,NVDA"),
-                Guru(name="Jensen Huang", handle="@jensenhuang", description="NVIDIA Founder & CEO", influence_score=98, target_symbols="NVDA,TSM,MSFT"),
-                Guru(name="Cathie Wood", handle="@cathiewood", description="ARK Invest CEO & CIO", influence_score=88, target_symbols="TSLA,COIN,PLTR"),
-                Guru(name="Warren Buffett", handle="@berkshire", description="Berkshire Hathaway Chairman", influence_score=90, target_symbols="AAPL,BAC,KO"),
-                Guru(name="Sam Altman", handle="@sama", description="OpenAI CEO", influence_score=92, target_symbols="MSFT,NVDA"),
-            ]
-            for g in gurus_seed:
-                session.add(g)
-            await session.commit()
-
-            gurus_db = (await session.execute(select(Guru))).scalars().all()
-            guru_map = {g.name: g.id for g in gurus_db}
-
-            now = datetime.utcnow()
-            insights_seed = [
-                GuruInsight(
-                    guru_id=guru_map.get("Elon Musk", 1),
-                    symbol="TSLA",
-                    content="Supercomputing capacity for FSD V13 will double by next quarter. Tesla is an AI & Robotics company.",
-                    sentiment="Bullish",
-                    score=88,
-                    summary="FSD V13 슈퍼컴퓨팅 용량 2배 확충 및 로보틱스 비전 강조",
-                    reason="자율주행 FSD 버전 13 컴퓨팅 파워 급증으로 기술적 도약 기대감 고조",
-                    price_at_timestamp=238.50,
-                    timestamp=now
-                ),
-                GuruInsight(
-                    guru_id=guru_map.get("Jensen Huang", 1),
-                    symbol="NVDA",
-                    content="Blackwell chip demand is insane. Enterprise AI adoption is entering the second wave.",
-                    sentiment="Bullish",
-                    score=94,
-                    summary="블랙웰 칩 수요 폭발 및 엔터프라이즈 AI 2차 파도 도달",
-                    reason="차세대 블랙웰 GPU 공급 부족 지속 및 전 세계 기업들의 AI 인프라 투자 지속 확인",
-                    price_at_timestamp=124.20,
-                    timestamp=now
-                ),
-                GuruInsight(
-                    guru_id=guru_map.get("Cathie Wood", 1),
-                    symbol="TSLA",
-                    content="AI-driven autonomous taxi networks could represent a $10 trillion global revenue opportunity.",
-                    sentiment="Bullish",
-                    score=90,
-                    summary="자율주행 로보택시 네트워크 시장 규모 10조 달러 전망",
-                    reason="로보택시 상용화가 테슬라 기업가치의 핵심 동력이 될 것으로 평가",
-                    price_at_timestamp=235.10,
-                    timestamp=now
-                ),
-                GuruInsight(
-                    guru_id=guru_map.get("Sam Altman", 1),
-                    symbol="MSFT",
-                    content="AGI compute requirements will exceed all current energy expectations, but scaling laws hold true.",
-                    sentiment="Bullish",
-                    score=86,
-                    summary="AGI 컴퓨팅 수요 및 스케일링 법칙 유효성 재확인",
-                    reason="클라우드 인프라 파트너사인 마이크로소프트의 지속적인 데이터센터 수혜 기대",
-                    price_at_timestamp=445.80,
-                    timestamp=now
-                ),
-                GuruInsight(
-                    guru_id=guru_map.get("Warren Buffett", 1),
-                    symbol="AAPL",
-                    content="Cash reserves are at record highs. We wait for extraordinary value opportunities.",
-                    sentiment="Neutral",
-                    score=52,
-                    summary="역대 최고 수준의 현금 비축 및 우량 매수 기회 대기",
-                    reason="시장 변동성 대비 안정적 자금 운용 기조 및 관망 자세 유지",
-                    price_at_timestamp=224.30,
-                    timestamp=now
+async def ensure_default_data():
+    try:
+        async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with async_session() as session:
+            # 1. 기본 관리자 계정 생성
+            statement_user = select(User).where(User.username == "admin")
+            result_user = await session.execute(statement_user)
+            if not result_user.scalar_one_or_none():
+                logger.info("🔐 기본 계정(admin) 생성 중...")
+                default_user = User(
+                    username="admin",
+                    email="admin@example.com",
+                    hashed_password=get_password_hash("admin1234")
                 )
-            ]
-            for ins in insights_seed:
-                session.add(ins)
-            await session.commit()
+                session.add(default_user)
+                await session.commit()
+
+            # 2. 기본 AI 대가(Guru) 및 발언 데이터 시딩
+            statement_guru = select(Guru)
+            result_guru = await session.execute(statement_guru)
+            if not result_guru.scalars().first():
+                logger.info("🧠 AI 대가(Guru) 데이터 시딩 중...")
+                gurus_seed = [
+                    Guru(name="Elon Musk", handle="@elonmusk", description="Tesla & xAI CEO", influence_score=95, target_symbols="TSLA,NVDA"),
+                    Guru(name="Jensen Huang", handle="@jensenhuang", description="NVIDIA Founder & CEO", influence_score=98, target_symbols="NVDA,TSM,MSFT"),
+                    Guru(name="Cathie Wood", handle="@cathiewood", description="ARK Invest CEO & CIO", influence_score=88, target_symbols="TSLA,COIN,PLTR"),
+                    Guru(name="Warren Buffett", handle="@berkshire", description="Berkshire Hathaway Chairman", influence_score=90, target_symbols="AAPL,BAC,KO"),
+                    Guru(name="Sam Altman", handle="@sama", description="OpenAI CEO", influence_score=92, target_symbols="MSFT,NVDA"),
+                ]
+                for g in gurus_seed:
+                    session.add(g)
+                await session.commit()
+
+                gurus_db = (await session.execute(select(Guru))).scalars().all()
+                guru_map = {g.name: g.id for g in gurus_db}
+
+                now = datetime.utcnow()
+                insights_seed = [
+                    GuruInsight(
+                        guru_id=guru_map.get("Elon Musk", 1),
+                        symbol="TSLA",
+                        content="Supercomputing capacity for FSD V13 will double by next quarter. Tesla is an AI & Robotics company.",
+                        sentiment="Bullish",
+                        score=88,
+                        summary="FSD V13 슈퍼컴퓨팅 용량 2배 확충 및 로보틱스 비전 강조",
+                        reason="자율주행 FSD 버전 13 컴퓨팅 파워 급증으로 기술적 도약 기대감 고조",
+                        price_at_timestamp=238.50,
+                        timestamp=now
+                    ),
+                    GuruInsight(
+                        guru_id=guru_map.get("Jensen Huang", 1),
+                        symbol="NVDA",
+                        content="Blackwell chip demand is insane. Enterprise AI adoption is entering the second wave.",
+                        sentiment="Bullish",
+                        score=94,
+                        summary="블랙웰 칩 수요 폭발 및 엔터프라이즈 AI 2차 파도 도달",
+                        reason="차세대 블랙웰 GPU 공급 부족 지속 및 전 세계 기업들의 AI 인프라 투자 지속 확인",
+                        price_at_timestamp=124.20,
+                        timestamp=now
+                    ),
+                    GuruInsight(
+                        guru_id=guru_map.get("Cathie Wood", 1),
+                        symbol="TSLA",
+                        content="AI-driven autonomous taxi networks could represent a $10 trillion global revenue opportunity.",
+                        sentiment="Bullish",
+                        score=90,
+                        summary="자율주행 로보택시 네트워크 시장 규모 10조 달러 전망",
+                        reason="로보택시 상용화가 테슬라 기업가치의 핵심 동력이 될 것으로 평가",
+                        price_at_timestamp=235.10,
+                        timestamp=now
+                    ),
+                    GuruInsight(
+                        guru_id=guru_map.get("Sam Altman", 1),
+                        symbol="MSFT",
+                        content="AGI compute requirements will exceed all current energy expectations, but scaling laws hold true.",
+                        sentiment="Bullish",
+                        score=86,
+                        summary="AGI 컴퓨팅 수요 및 스케일링 법칙 유효성 재확인",
+                        reason="클라우드 인프라 파트너사인 마이크로소프트의 지속적인 데이터센터 수혜 기대",
+                        price_at_timestamp=445.80,
+                        timestamp=now
+                    ),
+                    GuruInsight(
+                        guru_id=guru_map.get("Warren Buffett", 1),
+                        symbol="AAPL",
+                        content="Cash reserves are at record highs. We wait for extraordinary value opportunities.",
+                        sentiment="Neutral",
+                        score=52,
+                        summary="역대 최고 수준의 현금 비축 및 우량 매수 기회 대기",
+                        reason="시장 변동성 대비 안정적 자금 운용 기조 및 관망 자세 유지",
+                        price_at_timestamp=224.30,
+                        timestamp=now
+                    )
+                ]
+                for ins in insights_seed:
+                    session.add(ins)
+                await session.commit()
+    except Exception as e:
+        logger.error(f"⚠️ 데이터 시딩 오류 발생 (서버는 정상 구동됩니다): {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    await ensure_default_user()
-    await ensure_default_gurus()
+    await ensure_default_data()
     worker_task = asyncio.create_task(trading_worker.start(interval_seconds=60))
     broadcaster_task = asyncio.create_task(price_broadcaster())
     yield
     trading_worker.stop()
     worker_task.cancel()
     broadcaster_task.cancel()
+
 
 
 

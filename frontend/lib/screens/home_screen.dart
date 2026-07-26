@@ -105,7 +105,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _apiService.getMe(),
       _apiService.getPortfolio(),
       _apiService.getPortfolioHistory(),
-      _apiService.getMarketSentiment(),
     ]);
     
     if (mounted) {
@@ -118,11 +117,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _summary = portfolioRaw['summary'] as Map<String, dynamic>?;
         }
         _equityHistory = results[2] as List<dynamic>?;
-        _marketSentiment = results[3] as Map<String, dynamic>?;
         _isLoading = false;
       });
     }
+
+    // 💡 시장 감정 분석은 무한 로딩 방지를 위해 백그라운드 비동기로 로딩
+    _apiService.getMarketSentiment().then((sentiment) {
+      if (mounted) {
+        setState(() {
+          _marketSentiment = sentiment;
+        });
+      }
+    });
   }
+
 
   @override
   Widget build(BuildContext context) {
