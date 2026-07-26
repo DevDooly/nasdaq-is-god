@@ -26,9 +26,33 @@ import asyncio
 import logging
 import json
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
+import time
+import traceback
+from collections import deque
+
+# --- 상세 로깅 체계 구축 ---
+log_buffer = deque(maxlen=200)
+
+class BufferHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            log_buffer.append(msg)
+        except Exception:
+            pass
+
+formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d] - %(message)s')
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+
+buffer_handler = BufferHandler()
+buffer_handler.setFormatter(formatter)
+
 logger = logging.getLogger("api_server")
+logger.setLevel(logging.INFO)
+logger.addHandler(console_handler)
+logger.addHandler(buffer_handler)
 
 # --- 서비스 초기화 ---
 USE_REAL_BROKER = os.getenv("USE_REAL_BROKER", "false").lower() == "true"
@@ -38,6 +62,7 @@ ai_service = AIService()
 trade_service = TradeService(broker)
 strategy_service = StrategyService(indicator_service)
 trading_worker = TradingWorker(strategy_service, trade_service)
+
 
 async def price_broadcaster():
     """실시간 시세 브로드캐스트 루프"""
@@ -192,6 +217,33 @@ app = FastAPI(title="Nasdaq is God API", lifespan=lifespan)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    client_ip = request.client.host if request.client else "unknown"
+    logger.info(f"➡️ [REQ] {request.method} {request.url.path} from {client_ip}")
+    try:
+        response = await call_next(request)
+        process_time = (time.time() - start_time) * 1000
+        logger.info(f"⬅️ [RES] {request.method} {request.url.path} -> Status {response.status_code} ({process_time:.2f}ms)")
+        return response
+    except Exception as exc:
+        process_time = (time.time() - start_time) * 1000
+        logger.error(f"❌ [ERR] {request.method} {request.url.path} Failed after {process_time:.2f}ms: {exc}")
+        logger.error(traceback.format_exc())
+        raise exc
+
+@app.get("/system/logs")
+async def get_system_logs(limit: int = 100):
+    """실시간 시스템 및 API 동작 라이브 로그 조회 엔드포인트"""
+    logs_list = list(log_buffer)
+    return {
+        "total_lines": len(logs_list),
+        "requested_limit": limit,
+        "logs": logs_list[-limit:]
+    }
+
 
 # --- 의존성 ---
 async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSession = Depends(get_session)) -> User:
