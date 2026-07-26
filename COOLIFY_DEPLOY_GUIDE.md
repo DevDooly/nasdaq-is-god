@@ -53,4 +53,5 @@ GEMINI_API_KEY=your_gemini_api_key_here
 ## 3. 포트 안내
 
 - **Backend API (FastAPI)**: `http://<MINI_PC_IP>:9000` (Swagger UI: `http://<MINI_PC_IP>:9000/docs`)
-- **Frontend Web**: `http://<MINI_PC_IP>:8080`
+- **Frontend Web**: `http://<MINI_PC_IP>:8081`
+
