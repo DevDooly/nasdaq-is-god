@@ -11,24 +11,14 @@
 ### 방법 A: 웹 API를 통한 라이브 로그 조회 (가장 간편함)
 브라우저에서 아래 주소로 접속하시면 백엔드의 최근 라이브 동작 및 HTTP 요청/응답 로그 100줄을 JSON으로 즉시 확인하실 수 있습니다:
 ```text
-http://<MINI_PC_IP>:9000/system/logs
+http://<MINI_PC_IP>:9090/system/logs
 ```
 
 ### 방법 B: Coolify 웹 대시보드 `Logs` 탭 활용
 1. Coolify 웹 대시보드 (`http://192.168.0.2:8000`) 접속
 2. `Projects` -> `nasdaqisgod` 선택
-3. `backend` (또나 `frontend`, `db`, `bot`) 컨테이너 선택
+3. `backend` (또는 `frontend`, `db`, `bot`) 컨테이너 선택
 4. 상단 **`Logs`** 탭 클릭 시 실시간 콘솔 로그 스트림 확인 가능
-
-### 방법 C: Mini PC 터미널에서 Docker Logs 확인
-Mini PC SSH 접속 후 아래 커맨드로 콘솔 로그를 추적할 수 있습니다:
-```bash
-# 백엔드 라이브 로그 추적
-docker logs -f --tail 100 nasdaq-backend
-
-# 전체 컨테이너 상태 확인
-docker ps
-```
 
 ---
 
@@ -61,13 +51,14 @@ python reset_db.py
 
 ### 2단계: 포트 노출 설정 (Ports Expose)
 * **`frontend`** 컨테이너 -> `Ports Expose`: `8081:80` 입력
-* **`backend`** 컨테이너 -> `Ports Expose`: `9000:9000` 입력
+* **`backend`** 컨테이너 -> `Ports Expose`: `9090:9000` 입력
 
 ---
 
 ## 4. 접속 포트 안내
 
-- **Backend API (FastAPI)**: `http://<MINI_PC_IP>:9000`
-- **라이브 로그 API**: `http://<MINI_PC_IP>:9000/system/logs`
-- **Swagger API Docs**: `http://<MINI_PC_IP>:9000/docs`
+- **Backend API (FastAPI)**: `http://<MINI_PC_IP>:9090`
+- **라이브 로그 API**: `http://<MINI_PC_IP>:9090/system/logs`
+- **Swagger API Docs**: `http://<MINI_PC_IP>:9090/docs`
 - **Frontend Web**: `http://<MINI_PC_IP>:8081`
+

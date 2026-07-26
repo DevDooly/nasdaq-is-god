@@ -28686,9 +28686,9 @@ aCC:function aCC(a){this.a=a},
 aCB:function aCB(){},
 aCA:function aCA(a){this.a=a},
 aUG(){var s=A.TI()
-return"http://"+s.gmu(s)+":9000"},
+return"http://"+s.gmu(s)+":9090"},
 aUH(){var s=A.TI()
-return"ws://"+s.gmu(s)+":9000/ws/updates"},
+return"ws://"+s.gmu(s)+":9090/ws/updates"},
 pO(){var s=A.aUN(A.aUG(),B.p6,B.p6,B.iW),r=new A.P2(A.b([B.ES],t.i6))
 r.R(r,B.N9)
 r=new A.a84($,r,$,new A.abw(51200),!1)
