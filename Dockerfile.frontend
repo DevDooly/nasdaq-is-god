@@ -1,0 +1,8 @@
+FROM nginx:alpine
+
+# Flutter Web 빌드 결과물 서빙
+COPY frontend/build/web /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

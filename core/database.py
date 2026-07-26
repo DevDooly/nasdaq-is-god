@@ -16,9 +16,12 @@ engine = create_async_engine(DATABASE_URL, echo=True, future=True)
 
 async def init_db():
     async with engine.begin() as conn:
-        # 이 코드는 운영 환경에서는 Alembic 사용을 권장하지만, 
-        # 초기 개발 단계에서는 테이블 자동 생성을 위해 사용합니다.
+        # RESET_DB=true 인 경우 기존 모든 테이블을 삭제 후 새로 생성
+        if os.getenv("RESET_DB", "false").lower() == "true":
+            print("⚠️ RESET_DB가 true로 설정되어 기존 모든 DB 테이블을 삭제하고 초기화합니다...")
+            await conn.run_sync(SQLModel.metadata.drop_all)
         await conn.run_sync(SQLModel.metadata.create_all)
+
 
 async def get_session() -> AsyncSession:
     async_session = sessionmaker(
