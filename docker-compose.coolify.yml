@@ -11,6 +11,8 @@ services:
       POSTGRES_DB: ${DB_NAME:-nasdaq_god}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "0.0.0.0:5432:5432"
 
   # 2. 백엔드 API (FastAPI)
   backend:
@@ -25,7 +27,7 @@ services:
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     ports:
-      - "9000:9000"
+      - "0.0.0.0:9000:9000"
     depends_on:
       - db
 
@@ -36,7 +38,7 @@ services:
       dockerfile: Dockerfile.frontend
     restart: always
     ports:
-      - "8081:80"
+      - "0.0.0.0:8081:80"
     depends_on:
       - backend
 

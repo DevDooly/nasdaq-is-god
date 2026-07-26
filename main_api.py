@@ -160,8 +160,21 @@ async def ensure_default_data():
     except Exception as e:
         logger.error(f"⚠️ 데이터 시딩 오류 발생 (서버는 정상 구동됩니다): {e}")
 
+async def wait_for_db():
+    retries = 15
+    while retries > 0:
+        try:
+            async with engine.begin() as conn:
+                logger.info("✅ Database connection established successfully.")
+                return
+        except Exception as e:
+            retries -= 1
+            logger.warning(f"⏳ Database connection waiting... ({retries} attempts remaining): {e}")
+            await asyncio.sleep(2)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await wait_for_db()
     await init_db()
     await ensure_default_data()
     worker_task = asyncio.create_task(trading_worker.start(interval_seconds=60))
@@ -170,6 +183,7 @@ async def lifespan(app: FastAPI):
     trading_worker.stop()
     worker_task.cancel()
     broadcaster_task.cancel()
+
 
 
 
