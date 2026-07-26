@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. PostgreSQL DB
+  # 1. PostgreSQL DB (내부 전용, 호스트 5432 포트 충돌 방지)
   db:
     image: postgres:15-alpine
     restart: always
@@ -11,8 +11,6 @@ services:
       POSTGRES_DB: ${DB_NAME:-nasdaq_god}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "0.0.0.0:5432:5432"
 
   # 2. 백엔드 API (FastAPI)
   backend:
@@ -27,7 +25,7 @@ services:
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     ports:
-      - "0.0.0.0:9000:9000"
+      - "9000:9000"
     depends_on:
       - db
 
@@ -38,7 +36,7 @@ services:
       dockerfile: Dockerfile.frontend
     restart: always
     ports:
-      - "0.0.0.0:8081:80"
+      - "8081:80"
     depends_on:
       - backend
 
