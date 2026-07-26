@@ -123,46 +123,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('AI CONFIGURATION')),
-      backgroundColor: const Color(0xFF0F172A),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
-          : Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('AI PROVIDERS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '여러 AI 프로바이더를 등록하고 관리할 수 있습니다. 활성화된 프로바이더가 분석에 사용됩니다.',
-                    style: TextStyle(color: Colors.grey, fontSize: 13),
-                  ),
-                  const SizedBox(height: 32),
-                  Expanded(
-                    child: _apiKeys == null || _apiKeys!.isEmpty
-                        ? _buildEmptyState()
-                        : ListView.separated(
-                            itemCount: _apiKeys!.length,
-                            separatorBuilder: (context, index) => const SizedBox(height: 12),
-                            itemBuilder: (context, index) {
-                              final key = _apiKeys![index];
-                              return _buildKeyCard(key);
-                            },
-                          ),
-                  ),
-                ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('AI CONFIGURATION')),
+        backgroundColor: const Color(0xFF0F172A),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
+            : Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('AI PROVIDERS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '여러 AI 프로바이더를 등록하고 관리할 수 있습니다. 활성화된 프로바이더가 분석에 사용됩니다.',
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                    const SizedBox(height: 32),
+                    Expanded(
+                      child: _apiKeys == null || _apiKeys!.isEmpty
+                          ? _buildEmptyState()
+                          : ListView.separated(
+                              itemCount: _apiKeys!.length,
+                              separatorBuilder: (context, index) => const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final key = _apiKeys![index];
+                                return _buildKeyCard(key);
+                              },
+                            ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddKeyDialog,
-        icon: const Icon(Icons.add),
-        label: const Text('ADD CONFIG'),
-        backgroundColor: Colors.blueAccent,
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _showAddKeyDialog,
+          icon: const Icon(Icons.add),
+          label: const Text('ADD CONFIG'),
+          backgroundColor: Colors.blueAccent,
+        ),
       ),
     );
   }
+
 
   Widget _buildEmptyState() {
     return Center(

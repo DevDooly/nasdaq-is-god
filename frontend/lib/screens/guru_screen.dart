@@ -44,7 +44,16 @@ class _GuruScreenState extends State<GuruScreen> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+
       backgroundColor: const Color(0xFF020617),
       appBar: AppBar(
         title: const Text('GURU ALPHA', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
@@ -76,8 +85,10 @@ class _GuruScreenState extends State<GuruScreen> with SingleTickerProviderStateM
         backgroundColor: Colors.purpleAccent,
         child: const Icon(Icons.psychology, color: Colors.white),
       ) : null,
-    );
-  }
+    ),
+  );
+}
+
 
   Widget _buildTimelineTab() {
     if (_insights.isEmpty) {

@@ -34,54 +34,64 @@ class _TradeHistoryScreenState extends State<TradeHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('거래 내역')),
-      backgroundColor: const Color(0xFF0F172A),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _history == null || _history!.isEmpty
-              ? const Center(child: Text('거래 내역이 없습니다', style: TextStyle(color: Colors.grey)))
-              : ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _history!.length,
-                  separatorBuilder: (context, index) => const Divider(color: Colors.white10),
-                  itemBuilder: (context, index) {
-                    final log = _history![index];
-                    final isBuy = log.side.toUpperCase() == 'BUY';
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
-                        backgroundColor: isBuy ? Colors.greenAccent.withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
-                        child: Icon(
-                          isBuy ? Icons.add : Icons.remove,
-                          color: isBuy ? Colors.greenAccent : Colors.redAccent,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('거래 내역')),
+        backgroundColor: const Color(0xFF0F172A),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _history == null || _history!.isEmpty
+                ? const Center(child: Text('거래 내역이 없습니다', style: TextStyle(color: Colors.grey)))
+                : ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _history!.length,
+                    separatorBuilder: (context, index) => const Divider(color: Colors.white10),
+                    itemBuilder: (context, index) {
+                      final log = _history![index];
+                      final isBuy = log.side.toUpperCase() == 'BUY';
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          backgroundColor: isBuy ? Colors.greenAccent.withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
+                          child: Icon(
+                            isBuy ? Icons.add : Icons.remove,
+                            color: isBuy ? Colors.greenAccent : Colors.redAccent,
+                          ),
                         ),
-                      ),
-                      title: Text(
-                        '${log.symbol} · ${isBuy ? '매수' : '매도'}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      subtitle: Text(
-                        DateFormat('yyyy-MM-dd HH:mm').format(log.executedAt),
-                        style: const TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '\$${NumberFormat('#,##0.00').format(log.totalAmount)}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                          Text(
-                            '${log.quantity} 주 @ \$${log.price.toStringAsFixed(2)}',
-                            style: const TextStyle(fontSize: 11, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                        title: Text(
+                          '${log.symbol} · ${isBuy ? '매수' : '매도'}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          DateFormat('yyyy-MM-dd HH:mm').format(log.executedAt),
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '\$${NumberFormat('#,##0.00').format(log.totalAmount)}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            Text(
+                              '${log.quantity} 주 @ \$${log.price.toStringAsFixed(2)}',
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+      ),
     );
   }
+
 }

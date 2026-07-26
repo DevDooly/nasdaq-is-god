@@ -81,55 +81,65 @@ class _StrategyScreenState extends State<StrategyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('자동 매매 전략')),
-      backgroundColor: const Color(0xFF0F172A),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _strategies == null || _strategies!.isEmpty
-               ? const Center(child: Text('등록된 전략이 없습니다', style: TextStyle(color: Colors.grey)))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _strategies!.length,
-                  itemBuilder: (context, index) {
-                    final strategy = _strategies![index];
-                    return Card(
-                      color: Colors.white.withOpacity(0.05),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: ListTile(
-                        title: Text(strategy.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        subtitle: Text('${strategy.symbol} · ${strategy.strategyType}', style: const TextStyle(color: Colors.grey)),
-                        trailing: Switch(
-                          value: strategy.isActive,
-                          onChanged: (val) async {
-                            await _apiService.toggleStrategy(strategy.id);
-                            _fetchStrategies();
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('자동 매매 전략')),
+        backgroundColor: const Color(0xFF0F172A),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _strategies == null || _strategies!.isEmpty
+                 ? const Center(child: Text('등록된 전략이 없습니다', style: TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _strategies!.length,
+                    itemBuilder: (context, index) {
+                      final strategy = _strategies![index];
+                      return Card(
+                        color: Colors.white.withOpacity(0.05),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          title: Text(strategy.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          subtitle: Text('${strategy.symbol} · ${strategy.strategyType}', style: const TextStyle(color: Colors.grey)),
+                          trailing: Switch(
+                            value: strategy.isActive,
+                            onChanged: (val) async {
+                              await _apiService.toggleStrategy(strategy.id);
+                              _fetchStrategies();
+                            },
+                          ),
+                          onLongPress: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('전략을 삭제하시겠습니까?'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('아니오')),
+                                  TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('예')),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              await _apiService.deleteStrategy(strategy.id);
+                              _fetchStrategies();
+                            }
                           },
                         ),
-                        onLongPress: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('전략을 삭제하시겠습니까?'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('아니오')),
-                                TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('예')),
-                              ],
-                            ),
-                          );
-                          if (confirm == true) {
-                            await _apiService.deleteStrategy(strategy.id);
-                            _fetchStrategies();
-                          }
-                        },
-                      ),
-                    );
-                  },
-                ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddStrategyDialog,
-        child: const Icon(Icons.add),
+                      );
+                    },
+                  ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _showAddStrategyDialog,
+          child: const Icon(Icons.add),
+        ),
       ),
     );
   }
+
 }
