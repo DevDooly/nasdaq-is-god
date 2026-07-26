@@ -1,14 +1,14 @@
 version: '3.8'
 
 services:
-  # 1. PostgreSQL DB (내부 전용, 호스트 5432 포트 충돌 방지)
+  # 1. PostgreSQL DB (내부 전용)
   db:
     image: postgres:15-alpine
     restart: always
     environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
-      POSTGRES_DB: ${DB_NAME:-nasdaq_god}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: nasdaq_god
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -19,14 +19,13 @@ services:
       dockerfile: Dockerfile.backend
     restart: always
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-password}@db:5432/${DB_NAME:-nasdaq_god}
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/nasdaq_god
       - RESET_DB=${RESET_DB:-false}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     ports:
       - "9090:9000"
-
     depends_on:
       - db
 
@@ -48,7 +47,7 @@ services:
       dockerfile: Dockerfile.bot
     restart: always
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-password}@db:5432/${DB_NAME:-nasdaq_god}
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/nasdaq_god
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
