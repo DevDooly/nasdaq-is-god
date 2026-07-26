@@ -33,12 +33,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Map<String, Color> _priceBlinkColors = {};
   StreamSubscription? _updateSubscription;
 
+  bool _isSidebarExpanded = true;
+
   @override
   void initState() {
     super.initState();
     _fetchData();
     _initWebSocket();
   }
+
 
   @override
   void dispose() {
@@ -231,21 +234,70 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildSidebar() {
-    return Container(
-      width: 80,
-      color: const Color(0xFF020617),
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isExpanded = _isSidebarExpanded && screenWidth > 900;
+    final double sidebarWidth = isExpanded ? 200 : 72;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: sidebarWidth,
+      decoration: BoxDecoration(
+        color: const Color(0xFF020617),
+        border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05))),
+      ),
       child: Column(
+        crossAxisAlignment: isExpanded ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
-          const SizedBox(height: 40),
-          const Icon(Icons.auto_graph, color: Colors.cyanAccent, size: 32),
-          const Spacer(),
-          _sidebarIcon(Icons.dashboard, true),
-          _sidebarIcon(Icons.psychology, false, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GuruScreen()))),
-          _sidebarIcon(Icons.settings_suggest, false, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const StrategyScreen()))),
-          _sidebarIcon(Icons.history, false, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TradeHistoryScreen()))),
-          _sidebarIcon(Icons.settings, false, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()))),
-          const Spacer(),
-          _sidebarIcon(Icons.logout, false, onTap: () async {
+          const SizedBox(height: 24),
+          // 헤더 및 토글 버튼
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: isExpanded ? 16 : 0),
+            child: Row(
+              mainAxisAlignment: isExpanded ? MainAxisAlignment.spaceBetween : MainAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.auto_graph, color: Colors.cyanAccent, size: 28),
+                    if (isExpanded) ...[
+                      const SizedBox(width: 12),
+                      const Text(
+                        '나스닥의 신',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1),
+                      ),
+                    ],
+                  ],
+                ),
+                IconButton(
+                  icon: Icon(
+                    isExpanded ? Icons.chevron_left : Icons.chevron_right,
+                    color: Colors.grey,
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _isSidebarExpanded = !_isSidebarExpanded;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          // 메뉴 아이템들
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                _sidebarMenuItem(Icons.dashboard, '대시보드', true, isExpanded),
+                _sidebarMenuItem(Icons.psychology, 'AI 대가 분석', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GuruScreen()))),
+                _sidebarMenuItem(Icons.settings_suggest, '매매 전략', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const StrategyScreen()))),
+                _sidebarMenuItem(Icons.history, '거래 내역', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TradeHistoryScreen()))),
+                _sidebarMenuItem(Icons.settings, '시스템 설정', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()))),
+              ],
+            ),
+          ),
+          // 하단 로그아웃
+          _sidebarMenuItem(Icons.logout, '로그아웃', false, isExpanded, onTap: () async {
             await _apiService.logout();
             if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
           }),
@@ -255,15 +307,41 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _sidebarIcon(IconData icon, bool active, {VoidCallback? onTap}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: InkWell(
-        onTap: onTap,
-        child: Icon(icon, color: active ? Colors.cyanAccent : Colors.grey[600], size: 28),
+  Widget _sidebarMenuItem(IconData icon, String label, bool active, bool isExpanded, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 14, horizontal: isExpanded ? 16 : 0),
+        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        decoration: BoxDecoration(
+          color: active ? Colors.cyanAccent.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: active ? Border.all(color: Colors.cyanAccent.withOpacity(0.3)) : null,
+        ),
+        child: Row(
+          mainAxisAlignment: isExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: active ? Colors.cyanAccent : Colors.grey[400], size: 22),
+            if (isExpanded) ...[
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: active ? Colors.cyanAccent : Colors.grey[300],
+                    fontSize: 13,
+                    fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
+
 
   Widget _buildAppBar() {
     bool isAutoEnabled = _userInfo?['is_auto_trading_enabled'] ?? true;
