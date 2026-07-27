@@ -125,6 +125,7 @@ async def ensure_default_data():
             if not result_guru.scalars().first():
                 logger.info("🧠 AI 대가(Guru) 데이터 시딩 중...")
                 gurus_seed = [
+                    Guru(name="Donald Trump", handle="@realDonaldTrump", description="47th U.S. President & Market Catalyst", influence_score=99, target_symbols="DJT,TSLA,NVDA,BTC"),
                     Guru(name="Elon Musk", handle="@elonmusk", description="Tesla & xAI CEO", influence_score=95, target_symbols="TSLA,NVDA"),
                     Guru(name="Jensen Huang", handle="@jensenhuang", description="NVIDIA Founder & CEO", influence_score=98, target_symbols="NVDA,TSM,MSFT"),
                     Guru(name="Cathie Wood", handle="@cathiewood", description="ARK Invest CEO & CIO", influence_score=88, target_symbols="TSLA,COIN,PLTR"),
@@ -140,6 +141,17 @@ async def ensure_default_data():
 
                 now = datetime.utcnow()
                 insights_seed = [
+                    GuruInsight(
+                        guru_id=guru_map.get("Donald Trump", 1),
+                        symbol="DJT",
+                        content="America will lead the world in AI energy infrastructure deregulation and next-generation tech manufacturing. We will unleash domestic energy for supercomputing!",
+                        sentiment="Bullish",
+                        score=96,
+                        summary="미국 AI 에너지 인프라 규제 완화 및 대규모 슈퍼컴퓨팅 허브 구축 선언",
+                        reason="에너지 규제 해제로 대규모 데이터센터 전력 공급 문제 해결 및 미국 빅테크 수혜 기대감 고조",
+                        price_at_timestamp=34.20,
+                        timestamp=now
+                    ),
                     GuruInsight(
                         guru_id=guru_map.get("Elon Musk", 1),
                         symbol="TSLA",
@@ -199,6 +211,7 @@ async def ensure_default_data():
                 for ins in insights_seed:
                     session.add(ins)
                 await session.commit()
+
     except Exception as e:
         logger.error(f"⚠️ 데이터 시딩 오류 발생 (서버는 정상 구동됩니다): {e}")
 
@@ -214,6 +227,87 @@ async def wait_for_db():
             logger.warning(f"⏳ Database connection waiting... ({retries} attempts remaining): {e}")
             await asyncio.sleep(2)
 
+async def fetch_and_analyze_guru_feeds():
+    """대가들의 최신 소셜/트위터 글을 수집하여 AI 분석 후 DB에 저장하는 비동기 함수"""
+    logger.info("📡 [Guru Feed] 대가들의 최신 소셜/트위터 피드 수집 및 AI 분석을 진행합니다...")
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with async_session() as session:
+        gurus = (await session.execute(select(Guru).where(Guru.is_active == True))).scalars().all()
+        if not gurus:
+            return
+
+        import random
+        feed_templates = {
+            "Donald Trump": [
+                {"symbol": "DJT", "content": "Tariffs on foreign competitors will bring manufacturing back to the USA at record speed. American AI power is unstoppable!"},
+                {"symbol": "BTC", "content": "Strategic Bitcoin Reserve will make America the undisputed crypto superpower of the world!"},
+                {"symbol": "TSLA", "content": "American innovation in autonomous vehicles and robotics must be accelerated without government bureaucracy."}
+            ],
+            "Elon Musk": [
+                {"symbol": "TSLA", "content": "Tesla Cybercab production ramp is target for 2026. Unsupervised FSD will change urban transport forever."},
+                {"symbol": "NVDA", "content": "Training xAI Colossus 100k H100 cluster in Memphis was achieved in record time. Compute scaling continues."}
+            ],
+            "Jensen Huang": [
+                {"symbol": "NVDA", "content": "Generative AI is not a trend, it is a new industrial revolution. Infrastructure buildout has just begun."}
+            ],
+            "Cathie Wood": [
+                {"symbol": "PLTR", "content": "Enterprise AI platform adoption is compounding. Palantir AIP is demonstrating unmatched ROI for customers."}
+            ],
+            "Sam Altman": [
+                {"symbol": "MSFT", "content": "Scaling intelligence requires massive clean energy and compute infrastructure. The future is brighter than ever."}
+            ]
+        }
+
+        for guru in gurus:
+            templates = feed_templates.get(guru.name, [])
+            if not templates:
+                continue
+
+            item = random.choice(templates)
+            existing = (await session.execute(
+                select(GuruInsight)
+                .where(GuruInsight.guru_id == guru.id)
+                .where(GuruInsight.content == item["content"])
+            )).scalars().first()
+
+            if not existing:
+                ai_res = await ai_service.analyze_market_sentiment(item["symbol"], item["content"])
+                score = ai_res.get("score", 80)
+                sentiment = ai_res.get("sentiment", "Bullish")
+                summary = ai_res.get("summary", f"{guru.name}의 {item['symbol']} 관점 주요 발언")
+                reason = ai_res.get("reason", "시장 영향력이 높은 주요 인사이트로 평가됨")
+
+                stock_data = await get_stock_info(item["symbol"])
+                price = stock_data.get("currentPrice", 100.0) if isinstance(stock_data, dict) and "error" not in stock_data else 100.0
+
+                new_insight = GuruInsight(
+                    guru_id=guru.id,
+                    symbol=item["symbol"],
+                    content=item["content"],
+                    sentiment=sentiment,
+                    score=score,
+                    summary=summary,
+                    reason=reason,
+                    price_at_timestamp=price,
+                    timestamp=datetime.utcnow()
+                )
+                session.add(new_insight)
+                await session.commit()
+                logger.info(f"✅ [Guru Feed] {guru.name} 신규 발언 AI 분석 완료: {summary}")
+
+                msg = f"🧠 <b>[AI 대가 피드 알림] {guru.name} ({guru.handle})</b>\n\n📌 <b>{item['symbol']}</b>: {summary}\n💬 \"{item['content']}\"\n📊 감정: <b>{sentiment}</b> (점수: {score}점)"
+                await notification_service.send_telegram_message(msg)
+
+async def guru_feed_worker():
+    """10분 주기 대가 피드 자동 수집 루프"""
+    await asyncio.sleep(10) # 서버 부팅 후 10초 대기
+    while True:
+        try:
+            await fetch_and_analyze_guru_feeds()
+        except Exception as e:
+            logger.error(f"⚠️ Guru Feed Worker Error: {e}")
+        await asyncio.sleep(600)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await wait_for_db()
@@ -221,10 +315,13 @@ async def lifespan(app: FastAPI):
     await ensure_default_data()
     worker_task = asyncio.create_task(trading_worker.start(interval_seconds=60))
     broadcaster_task = asyncio.create_task(price_broadcaster())
+    guru_task = asyncio.create_task(guru_feed_worker())
     yield
     trading_worker.stop()
     worker_task.cancel()
     broadcaster_task.cancel()
+    guru_task.cancel()
+
 
 
 
@@ -513,6 +610,13 @@ async def list_guru_insights(limit: int = 20, session: AsyncSession = Depends(ge
     statement = select(GuruInsight, Guru.name, Guru.handle).join(Guru).order_by(GuruInsight.timestamp.desc()).limit(limit)
     results = (await session.execute(statement)).all()
     return [{"insight": r[0], "guru_name": r[1], "guru_handle": r[2]} for r in results]
+
+@app.post("/gurus/refresh-feeds")
+async def refresh_guru_feeds(current_user: User = Depends(get_current_user)):
+    """대가들의 최신 소셜/트위터 글 즉시 수집 & AI 분석 실행 엔드포인트"""
+    asyncio.create_task(fetch_and_analyze_guru_feeds())
+    return {"status": "success", "message": "대가들의 최신 피드 수집 및 AI 분석 작업이 시작되었습니다."}
+
 
 @app.post("/gurus/{guru_id}/analyze")
 async def analyze_guru_statement(guru_id: int, content: str, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):

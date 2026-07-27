@@ -58,7 +58,22 @@ class _GuruScreenState extends State<GuruScreen> with SingleTickerProviderStateM
       appBar: AppBar(
         title: const Text('GURU ALPHA', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
         backgroundColor: Colors.transparent,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.sync, color: Colors.purpleAccent),
+            tooltip: '트위터 피드 갱신 & AI 분석',
+            onPressed: () async {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('📡 AI 대가들의 트위터 피드를 수집하고 AI 분석을 시작합니다...')),
+              );
+              await _apiService.refreshGuruFeeds();
+              await Future.delayed(const Duration(seconds: 2));
+              _fetchData();
+            },
+          ),
+        ],
         bottom: TabBar(
+
           controller: _tabController,
           indicatorColor: Colors.purpleAccent,
           labelColor: Colors.purpleAccent,

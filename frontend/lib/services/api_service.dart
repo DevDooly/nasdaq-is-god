@@ -306,4 +306,12 @@ class ApiService {
       return response.data;
     } catch (e) { return null; }
   }
+
+  Future<bool> refreshGuruFeeds() async {
+    try {
+      final response = await _dio.post('/gurus/refresh-feeds');
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
 }
