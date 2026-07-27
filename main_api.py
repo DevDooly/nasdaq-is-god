@@ -30,7 +30,7 @@ import time
 import traceback
 from collections import deque
 
-# --- 상세 로깅 체계 구축 ---
+# --- 상세 로깅 & EFK 연동 체계 구축 ---
 log_buffer = deque(maxlen=200)
 
 class BufferHandler(logging.Handler):
@@ -41,10 +41,26 @@ class BufferHandler(logging.Handler):
         except Exception:
             pass
 
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_data = {
+            "@timestamp": datetime.utcnow().isoformat() + "Z",
+            "level": record.levelname,
+            "logger": record.name,
+            "filename": record.filename,
+            "lineno": record.lineno,
+            "message": record.getMessage(),
+            "service": "nasdaq-backend"
+        }
+        if hasattr(record, "http_data"):
+            log_data.update(record.http_data)
+        return json.dumps(log_data, ensure_ascii=False)
+
 formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d] - %(message)s')
+json_formatter = JSONFormatter()
 
 console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
+console_handler.setFormatter(json_formatter)
 
 buffer_handler = BufferHandler()
 buffer_handler.setFormatter(formatter)
@@ -53,6 +69,7 @@ logger = logging.getLogger("api_server")
 logger.setLevel(logging.INFO)
 logger.addHandler(console_handler)
 logger.addHandler(buffer_handler)
+
 
 # --- 서비스 초기화 ---
 USE_REAL_BROKER = os.getenv("USE_REAL_BROKER", "false").lower() == "true"

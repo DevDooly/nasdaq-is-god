@@ -12,7 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # 2. 백엔드 API (FastAPI)
+  # 2. 백엔드 API (FastAPI - JSON 구조화 로깅)
   backend:
     build:
       context: .
