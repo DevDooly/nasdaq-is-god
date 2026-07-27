@@ -27,11 +27,9 @@ services:
       - RESET_DB=${RESET_DB:-false}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-    ports:
-      - "9095:9000"
     depends_on:
       - db
+
     logging:
       driver: fluentd
       options:
