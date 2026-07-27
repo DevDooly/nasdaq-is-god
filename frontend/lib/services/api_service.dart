@@ -9,18 +9,19 @@ class ApiService {
   static String get _baseUrl {
     if (kIsWeb) {
       final host = Uri.base.host;
-      return 'http://$host:9090';
+      return 'http://$host:9095';
     }
-    return 'http://localhost:9090';
+    return 'http://localhost:9095';
   }
 
   static String get _wsUrl {
     if (kIsWeb) {
       final host = Uri.base.host;
-      return 'ws://$host:9090/ws/updates';
+      return 'ws://$host:9095/ws/updates';
     }
-    return 'ws://localhost:9090/ws/updates';
+    return 'ws://localhost:9095/ws/updates';
   }
+
 
 
   final Dio _dio = Dio(BaseOptions(

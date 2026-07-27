@@ -11,7 +11,7 @@
 ### 방법 A: 웹 API를 통한 라이브 로그 조회 (가장 간편함)
 브라우저에서 아래 주소로 접속하시면 백엔드의 최근 라이브 동작 및 HTTP 요청/응답 로그 100줄을 JSON으로 즉시 확인하실 수 있습니다:
 ```text
-http://<MINI_PC_IP>:9090/system/logs
+http://<MINI_PC_IP>:9095/system/logs
 ```
 
 ### 방법 B: Coolify 웹 대시보드 `Logs` 탭 활용
@@ -51,14 +51,15 @@ python reset_db.py
 
 ### 2단계: 포트 노출 설정 (Ports Expose)
 * **`frontend`** 컨테이너 -> `Ports Expose`: `8081:80` 입력
-* **`backend`** 컨테이너 -> `Ports Expose`: `9090:9000` 입력
+* **`backend`** 컨테이너 -> `Ports Expose`: `9095:9000` 입력
 
 ---
 
 ## 4. 접속 포트 안내
 
-- **Backend API (FastAPI)**: `http://<MINI_PC_IP>:9090`
-- **라이브 로그 API**: `http://<MINI_PC_IP>:9090/system/logs`
-- **Swagger API Docs**: `http://<MINI_PC_IP>:9090/docs`
+- **Backend API (FastAPI)**: `http://<MINI_PC_IP>:9095`
+- **라이브 로그 API**: `http://<MINI_PC_IP>:9095/system/logs`
+- **Swagger API Docs**: `http://<MINI_PC_IP>:9095/docs`
 - **Frontend Web**: `http://<MINI_PC_IP>:8081`
+
 
