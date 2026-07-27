@@ -1,6 +1,5 @@
-version: '3.8'
-
 services:
+
   # 1. PostgreSQL DB (내부 전용)
   db:
     image: postgres:15-alpine
