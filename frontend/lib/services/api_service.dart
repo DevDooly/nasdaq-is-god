@@ -314,4 +314,38 @@ class ApiService {
     } catch (e) { return false; }
   }
 
+  // 💡 백테스팅 및 하이브리드 전략 연동 API
+  Future<Map<String, dynamic>?> runBacktest(String symbol, String strategyType, Map<String, dynamic> params, {String period = '1y', double initialCapital = 10000.0}) async {
+    try {
+      final response = await _dio.post('/backtest', data: {
+        'symbol': symbol,
+        'strategy_type': strategyType,
+        'parameters': params,
+        'period': period,
+        'initial_capital': initialCapital,
+      });
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<Map<String, dynamic>?> analyzeSentiment(String symbol) async {
+    try {
+      final response = await _dio.post('/sentiment/analyze', queryParameters: {'symbol': symbol});
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<Map<String, dynamic>?> evaluateHybrid(String symbol, String strategyType, double techWeight, double buyThreshold, double sellThreshold) async {
+    try {
+      final response = await _dio.post('/hybrid/evaluate', data: {
+        'symbol': symbol,
+        'strategy_type': strategyType,
+        'tech_weight': techWeight,
+        'buy_threshold': buyThreshold,
+        'sell_threshold': sellThreshold,
+      });
+      return response.data;
+    } catch (e) { return null; }
+  }
+
 }
