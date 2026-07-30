@@ -38,9 +38,12 @@
 2. Mini PC에 SSH 접속하여 소스를 수정하거나 테스트를 진행합니다:
    ```bash
    git pull origin dev
-   docker compose -f docker-compose.coolify.yml up -d --build
+   # 💡 프론트엔드 변경 사항이 있을 경우 반드시 flutter web 재빌드 수행
+   cd frontend && flutter build web && cd ..
+   # 💡 도커 컨테이너 재빌드 및 강제 재기동
+   docker compose -f docker-compose.coolify.yml up -d --build --force-recreate
    ```
-3. `curl`, 로그 확인 및 웹 화면 접속으로 버그/포트 에러가 없는지 100% 검증합니다.
+3. `curl`, 로그 확인 및 웹 화면 접속(캐시 무시 새로고침 Ctrl+F5)으로 버그/포트 에러가 없는지 100% 검증합니다.
 
 ---
 

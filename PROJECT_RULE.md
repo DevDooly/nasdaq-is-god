@@ -22,5 +22,6 @@
 
 ### 5. Git 및 배포
 - **Integrity Check**: 모든 코드 수정 완료 및 커밋 전에는 반드시 `./scripts/check_system.sh`를 실행하여 시스템의 무결성을 점검한다.
+- **Frontend Build Sync**: 프론트엔드 코드 수정 시 반드시 `flutter build web`을 미리 수행하여 정적 웹 빌드를 갱신한 후 `docker compose -f docker-compose.coolify.yml up -d --build --force-recreate`로 도커 이미지를 재빌드하고 강제 재기동한다.
 - `main` 브랜치는 항상 배포 가능한 상태를 유지한다.
 - Docker 환경에서 동작 가능하도록 의존성(`requirements.txt`)을 엄격히 관리한다.
