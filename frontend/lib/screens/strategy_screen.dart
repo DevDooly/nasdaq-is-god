@@ -18,10 +18,13 @@ class _StrategyScreenState extends State<StrategyScreen> with SingleTickerProvid
 
   // 백테스트 & 하이브리드 진단용 입력 폼 상태
   final _symbolController = TextEditingController(text: 'AAPL');
+  final FocusNode _symbolFocusNode = FocusNode();
+
   String _selectedStrategyType = 'HYBRID_ALL';
+  String _selectedPeriod = '1y';
   double _techWeight = 0.6;
-  double _buyThreshold = 70.0;
-  double _sellThreshold = 35.0;
+  double _buyThreshold = 60.0;
+  double _sellThreshold = 40.0;
 
   bool _isBacktesting = false;
   Map<String, dynamic>? _backtestResult;
@@ -39,6 +42,17 @@ class _StrategyScreenState extends State<StrategyScreen> with SingleTickerProvid
     {'value': 'DUAL_MOMENTUM', 'label': '🚀 듀얼 모멘텀 추세 추종'},
   ];
 
+  final List<Map<String, String>> _periodOptions = [
+    {'value': '6mo', 'label': '6개월'},
+    {'value': '1y', 'label': '1년'},
+    {'value': '2y', 'label': '2년'},
+    {'value': '5y', 'label': '5년'},
+  ];
+
+  final List<String> _popularTickers = [
+    'AAPL', 'TSLA', 'NVDA', 'QQQ', 'MSFT', 'AMZN', 'GOOGL', 'META', 'SPY', 'AMD', 'NFLX', 'INTC'
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +64,7 @@ class _StrategyScreenState extends State<StrategyScreen> with SingleTickerProvid
   void dispose() {
     _tabController.dispose();
     _symbolController.dispose();
+    _symbolFocusNode.dispose();
     super.dispose();
   }
 
@@ -71,11 +86,17 @@ class _StrategyScreenState extends State<StrategyScreen> with SingleTickerProvid
     });
 
     final symbol = _symbolController.text.trim().toUpperCase();
+    final params = {
+      'tech_weight': _techWeight,
+      'buy_threshold': _buyThreshold,
+      'sell_threshold': _sellThreshold,
+    };
+
     final res = await _apiService.runBacktest(
       symbol,
       _selectedStrategyType,
-      {'buy_threshold': _buyThreshold, 'sell_threshold': _sellThreshold},
-      period: '1y',
+      params,
+      period: _selectedPeriod,
     );
 
     if (mounted) {
@@ -220,49 +241,132 @@ class _StrategyScreenState extends State<StrategyScreen> with SingleTickerProvid
               children: [
                 const Text('⚙️ 시뮬레이션 및 전략 설정', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
+                
+                // 티커 자동완성 및 기간 선택
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // 티커 자동완성 검색창
                     Expanded(
-                      flex: 2,
-                      child: TextField(
-                        controller: _symbolController,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                        decoration: InputDecoration(
-                          labelText: '종목 티커',
-                          labelStyle: const TextStyle(color: Colors.grey),
-                          filled: true,
-                          fillColor: const Color(0xFF1E293B),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
+                      flex: 3,
+                      child: RawAutocomplete<String>(
+                        textEditingController: _symbolController,
+                        focusNode: _symbolFocusNode,
+                        optionsBuilder: (TextEditingValue textEditingValue) async {
+                          final query = textEditingValue.text.trim().toUpperCase();
+                          if (query.isEmpty) return const Iterable<String>.empty();
+                          
+                          final matches = _popularTickers.where((t) => t.contains(query)).toList();
+                          final searchRes = await _apiService.searchStock(query);
+                          if (searchRes != null && searchRes['symbol'] != null) {
+                            final sym = searchRes['symbol'] as String;
+                            if (!matches.contains(sym)) matches.insert(0, sym);
+                          }
+                          return matches;
+                        },
+                        onSelected: (String selection) {
+                          setState(() {
+                            _symbolController.text = selection;
+                          });
+                        },
+                        optionsViewBuilder: (context, onSelected, options) {
+                          return Align(
+                            alignment: Alignment.topLeft,
+                            child: Material(
+                              elevation: 8,
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(12),
+                              child: SizedBox(
+                                width: 220,
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  shrinkWrap: true,
+                                  itemCount: options.length,
+                                  itemBuilder: (context, index) {
+                                    final option = options.elementAt(index);
+                                    return ListTile(
+                                      dense: true,
+                                      title: Text(option, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                      leading: const Icon(Icons.show_chart, color: Color(0xFF06B6D4), size: 18),
+                                      onTap: () => onSelected(option),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            onEditingComplete: onEditingComplete,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            decoration: InputDecoration(
+                              labelText: '종목 티커 (자동완성)',
+                              labelStyle: const TextStyle(color: Colors.grey),
+                              prefixIcon: const Icon(Icons.search, color: Color(0xFF06B6D4)),
+                              filled: true,
+                              fillColor: const Color(0xFF1E293B),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),
+                    // 백테스트 기간 선택
                     Expanded(
-                      flex: 3,
+                      flex: 2,
                       child: DropdownButtonFormField<String>(
-                        value: _selectedStrategyType,
+                        value: _selectedPeriod,
                         dropdownColor: const Color(0xFF1E293B),
-                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                         decoration: InputDecoration(
-                          labelText: '매매 기법 선택',
+                          labelText: '테스트 기간',
                           labelStyle: const TextStyle(color: Colors.grey),
                           filled: true,
                           fillColor: const Color(0xFF1E293B),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                         ),
-                        items: _strategyOptions.map((opt) {
+                        items: _periodOptions.map((opt) {
                           return DropdownMenuItem<String>(
                             value: opt['value'],
-                            child: Text(opt['label']!, overflow: TextOverflow.ellipsis),
+                            child: Text(opt['label']!),
                           );
                         }).toList(),
                         onChanged: (val) {
-                          if (val != null) setState(() => _selectedStrategyType = val);
+                          if (val != null) setState(() => _selectedPeriod = val);
                         },
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                
+                // 매매 기법 선택
+                DropdownButtonFormField<String>(
+                  value: _selectedStrategyType,
+                  dropdownColor: const Color(0xFF1E293B),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: '매매 기법 선택',
+                    labelStyle: const TextStyle(color: Colors.grey),
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                  items: _strategyOptions.map((opt) {
+                    return DropdownMenuItem<String>(
+                      value: opt['value'],
+                      child: Text(opt['label']!, overflow: TextOverflow.ellipsis),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _selectedStrategyType = val);
+                  },
+                ),
+                
                 if (_selectedStrategyType.startsWith('HYBRID')) ...[
                   const SizedBox(height: 16),
                   Text('기술적 지표 가중치: ${(_techWeight * 100).toInt()}% (AI 센티먼트: ${((1 - _techWeight) * 100).toInt()}%)', style: const TextStyle(color: Colors.white70)),
@@ -274,6 +378,43 @@ class _StrategyScreenState extends State<StrategyScreen> with SingleTickerProvid
                     activeColor: const Color(0xFF06B6D4),
                     onChanged: (val) => setState(() => _techWeight = val),
                   ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('매수 임계점: ${_buyThreshold.toInt()}점 이상', style: const TextStyle(color: Colors.greenAccent, fontSize: 12)),
+                            Slider(
+                              value: _buyThreshold,
+                              min: 50.0,
+                              max: 85.0,
+                              divisions: 7,
+                              activeColor: Colors.greenAccent,
+                              onChanged: (val) => setState(() => _buyThreshold = val),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('매도 임계점: ${_sellThreshold.toInt()}점 이하', style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                            Slider(
+                              value: _sellThreshold,
+                              min: 20.0,
+                              max: 50.0,
+                              divisions: 6,
+                              activeColor: Colors.redAccent,
+                              onChanged: (val) => setState(() => _sellThreshold = val),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
                 const SizedBox(height: 16),
                 Row(
@@ -281,7 +422,7 @@ class _StrategyScreenState extends State<StrategyScreen> with SingleTickerProvid
                     Expanded(
                       child: ElevatedButton.icon(
                         icon: _isBacktesting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.history_toggle_off),
-                        label: const Text('과거 1년 백테스트 실행'),
+                        label: Text('과거 ${_periodOptions.firstWhere((p) => p['value'] == _selectedPeriod)['label']} 백테스트 실행'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF3B82F6),
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -324,6 +465,7 @@ class _StrategyScreenState extends State<StrategyScreen> with SingleTickerProvid
     final res = _backtestResult!;
     final totalReturn = (res['total_return'] ?? 0.0) as num;
     final isPositive = totalReturn >= 0;
+    final trades = (res['trades'] as List<dynamic>?) ?? [];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -339,7 +481,7 @@ class _StrategyScreenState extends State<StrategyScreen> with SingleTickerProvid
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('📊 과거 1년 백테스팅 성과 리포트 (${res['symbol']})', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              Text('📊 과거 ${_periodOptions.firstWhere((p) => p['value'] == _selectedPeriod)['label']} 백테스팅 성과 리포트 (${res['symbol']})', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               ElevatedButton.icon(
                 icon: const Icon(Icons.add_task, size: 16),
                 label: const Text('전략으로 등록'),
@@ -366,6 +508,41 @@ class _StrategyScreenState extends State<StrategyScreen> with SingleTickerProvid
               _buildMetricItem('총 완료 거래 수', '${res['total_trades_count'] ?? 0} 회', Colors.white),
             ],
           ),
+          if (trades.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Text('📑 최근 시뮬레이션 매매 거래 기록', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 8),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 180),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.03), borderRadius: BorderRadius.circular(12)),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: trades.length > 8 ? 8 : trades.length,
+                itemBuilder: (context, index) {
+                  final t = trades[index];
+                  final isBuy = t['type'] == 'BUY';
+                  final pnl = (t['pnl'] ?? 0.0) as num;
+                  final pnlPct = (t['pnl_percent'] ?? 0.0) as num;
+                  
+                  return ListTile(
+                    dense: true,
+                    leading: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: isBuy ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
+                      child: Text(t['type'], style: TextStyle(color: isBuy ? Colors.greenAccent : Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 11)),
+                    ),
+                    title: Text('${t['date']} · \$${t['price']}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                    trailing: isBuy
+                        ? null
+                        : Text(
+                            '${pnl >= 0 ? "+" : ""}\$${pnl.toStringAsFixed(2)} (${pnlPct >= 0 ? "+" : ""}${pnlPct.toStringAsFixed(2)}%)',
+                            style: TextStyle(color: pnl >= 0 ? Colors.greenAccent : Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                  );
+                },
+              ),
+            )
+          ]
         ],
       ),
     );

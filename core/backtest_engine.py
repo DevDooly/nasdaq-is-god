@@ -94,6 +94,54 @@ class BacktestEngine:
                 elif momentum.iloc[i-1] > 0 and momentum.iloc[i] <= 0:
                     signals.iloc[i] = -1
 
+        elif strategy_type.startswith("HYBRID"):
+            tech_weight = float(params.get("tech_weight", 0.6))
+            sent_weight = 1.0 - tech_weight
+            buy_threshold = float(params.get("buy_threshold", 65.0))
+            sell_threshold = float(params.get("sell_threshold", 40.0))
+            sent_score = float(params.get("sentiment_score", 65.0))
+
+            rsi = IndicatorService.calculate_rsi(close, period=14)
+            macd_dict = IndicatorService.calculate_macd(close)
+            bb_dict = IndicatorService.calculate_bollinger_bands(close)
+
+            hybrid_scores = pd.Series(50.0, index=df.index)
+
+            for i in range(len(df)):
+                r_val = float(rsi.iloc[i]) if not np.isnan(rsi.iloc[i]) else 50.0
+                r_score = max(0.0, min(100.0, 100.0 - r_val))
+
+                h_val = float(macd_dict["histogram"].iloc[i]) if not np.isnan(macd_dict["histogram"].iloc[i]) else 0.0
+                m_score = max(0.0, min(100.0, 50.0 + (h_val * 10)))
+
+                lower_b = float(bb_dict["lower"].iloc[i]) if not np.isnan(bb_dict["lower"].iloc[i]) else None
+                upper_b = float(bb_dict["upper"].iloc[i]) if not np.isnan(bb_dict["upper"].iloc[i]) else None
+                c_val = float(close.iloc[i])
+
+                if lower_b is not None and upper_b is not None and upper_b > lower_b:
+                    percent_b = (c_val - lower_b) / (upper_b - lower_b) * 100.0
+                    b_score = max(0.0, min(100.0, 100.0 - percent_b))
+                else:
+                    b_score = 50.0
+
+                if strategy_type == "HYBRID_RSI":
+                    t_score = r_score
+                elif strategy_type == "HYBRID_MACD":
+                    t_score = m_score
+                elif strategy_type == "HYBRID_BOLLINGER":
+                    t_score = b_score
+                else:
+                    t_score = (r_score + m_score + b_score) / 3.0
+
+                h_score = (t_score * tech_weight) + (sent_score * sent_weight)
+                hybrid_scores.iloc[i] = h_score
+
+            for i in range(1, len(df)):
+                if hybrid_scores.iloc[i-1] < buy_threshold and hybrid_scores.iloc[i] >= buy_threshold:
+                    signals.iloc[i] = 1
+                elif hybrid_scores.iloc[i-1] > sell_threshold and hybrid_scores.iloc[i] <= sell_threshold:
+                    signals.iloc[i] = -1
+
         return signals
 
     def run_backtest(self, symbol: str, strategy_type: str, params: Dict[str, Any], start_date: Optional[str] = None, end_date: Optional[str] = None, period: str = "1y") -> Dict[str, Any]:
@@ -103,16 +151,17 @@ class BacktestEngine:
         df = self.fetch_data(symbol, start_date=start_date, end_date=end_date, period=period)
         signals = self.generate_signals(df, strategy_type, params)
         
-        cash = self.initial_capital
-        position = 0 # 보유 주식 수
+        cash = float(self.initial_capital)
+        position = 0.0 # 보유 주식 수
         entry_price = 0.0
         trades: List[Dict[str, Any]] = []
         equity_curve: List[Dict[str, Any]] = []
         
         # 벤치마크 (Buy & Hold)
-        benchmark_shares = (self.initial_capital * (1 - self.commission_rate)) / df['Close'].iloc[0]
+        first_price = float(df['Close'].iloc[0])
+        benchmark_shares = (self.initial_capital * (1 - self.commission_rate)) / first_price
         
-        peak_equity = self.initial_capital
+        peak_equity = float(self.initial_capital)
         max_drawdown = 0.0
         
         for i in range(len(df)):
@@ -122,54 +171,54 @@ class BacktestEngine:
             
             # 매수 시그널
             if sig == 1 and position == 0:
-                buy_price = price * (1 + self.slippage_rate)
-                cost = cash * (1 - self.commission_rate)
-                position = cost / buy_price
+                buy_price = float(price * (1 + self.slippage_rate))
+                cost = float(cash * (1 - self.commission_rate))
+                position = float(cost / buy_price)
                 cash = 0.0
                 entry_price = buy_price
                 trades.append({
                     "type": "BUY",
                     "date": date_str,
-                    "price": round(buy_price, 2),
-                    "shares": round(position, 4)
+                    "price": round(float(buy_price), 2),
+                    "shares": round(float(position), 4)
                 })
             
             # 매도 시그널
             elif sig == -1 and position > 0:
-                sell_price = price * (1 - self.slippage_rate)
-                proceeds = (position * sell_price) * (1 - self.commission_rate)
-                pnl = proceeds - (position * entry_price)
-                pnl_percent = (sell_price - entry_price) / entry_price * 100.0
+                sell_price = float(price * (1 - self.slippage_rate))
+                proceeds = float((position * sell_price) * (1 - self.commission_rate))
+                pnl = float(proceeds - (position * entry_price))
+                pnl_percent = float((sell_price - entry_price) / entry_price * 100.0)
                 
                 trades.append({
                     "type": "SELL",
                     "date": date_str,
-                    "price": round(sell_price, 2),
-                    "shares": round(position, 4),
-                    "pnl": round(pnl, 2),
-                    "pnl_percent": round(pnl_percent, 2)
+                    "price": round(float(sell_price), 2),
+                    "shares": round(float(position), 4),
+                    "pnl": round(float(pnl), 2),
+                    "pnl_percent": round(float(pnl_percent), 2)
                 })
                 
                 cash = proceeds
-                position = 0
+                position = 0.0
                 entry_price = 0.0
             
             # 일별 자산 가치 계산
-            total_equity = cash + (position * price)
-            benchmark_equity = benchmark_shares * price
+            total_equity = float(cash + (position * price))
+            benchmark_equity = float(benchmark_shares * price)
             
             # MDD 계산
             if total_equity > peak_equity:
                 peak_equity = total_equity
-            drawdown = (total_equity - peak_equity) / peak_equity * 100.0
+            drawdown = float((total_equity - peak_equity) / peak_equity * 100.0)
             if drawdown < max_drawdown:
                 max_drawdown = drawdown
                 
             equity_curve.append({
                 "date": date_str,
-                "portfolio_value": round(total_equity, 2),
-                "benchmark_value": round(benchmark_equity, 2),
-                "drawdown": round(drawdown, 2),
+                "portfolio_value": round(float(total_equity), 2),
+                "benchmark_value": round(float(benchmark_equity), 2),
+                "drawdown": round(float(drawdown), 2),
                 "signal": int(sig)
             })
 
