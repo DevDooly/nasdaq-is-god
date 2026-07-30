@@ -15,6 +15,8 @@ from core.strategy_service import StrategyService
 from core.ai_service import AIService
 from core.worker import TradingWorker
 from core.backtest_engine import BacktestEngine
+from core.social_service import SocialService
+from core.sentiment_engine import SentimentEngine
 from core.notification_service import notification_service
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -79,6 +81,8 @@ USE_REAL_BROKER = os.getenv("USE_REAL_BROKER", "false").lower() == "true"
 broker = KISBroker() if USE_REAL_BROKER else MockBroker()
 indicator_service = IndicatorService()
 ai_service = AIService()
+social_service = SocialService()
+sentiment_engine = SentimentEngine(ai_service, social_service)
 trade_service = TradeService(broker)
 strategy_service = StrategyService(indicator_service)
 trading_worker = TradingWorker(strategy_service, trade_service)
@@ -831,6 +835,21 @@ async def run_backtest_api(req: BacktestRequest):
     except Exception as e:
         logger.error(f"Backtest error for {req.symbol}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/sentiment/analyze")
+async def analyze_symbol_sentiment(symbol: str = Query("AAPL"), session: AsyncSession = Depends(get_session)):
+    try:
+        result = await sentiment_engine.analyze_combined_sentiment(symbol, session=session)
+        return result
+    except Exception as e:
+        logger.error(f"Sentiment analysis failed for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/sentiment/history/{symbol}")
+async def get_sentiment_history(symbol: str, session: AsyncSession = Depends(get_session)):
+    stmt = select(AISentimentHistory).where(AISentimentHistory.symbol == symbol).order_by(AISentimentHistory.created_at.desc()).limit(30)
+    res = await session.execute(stmt)
+    return res.scalars().all()
 
 @app.get("/")
 async def root(): return {"message": "Nasdaq is God API - Real-time Ready"}
