@@ -355,4 +355,23 @@ class ApiService {
     } catch (e) { return null; }
   }
 
+  Future<Map<String, dynamic>?> getIssuesFeed({String? query, String? category, String? symbol}) async {
+    try {
+      final queryParams = <String, dynamic>{};
+      if (query != null && query.isNotEmpty) queryParams['q'] = query;
+      if (category != null && category.isNotEmpty) queryParams['category'] = category;
+      if (symbol != null && symbol.isNotEmpty) queryParams['symbol'] = symbol;
+      
+      final response = await _dio.get('/issues/feed', queryParameters: queryParams);
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<Map<String, dynamic>?> refreshIssuesFeed([String symbol = 'AAPL']) async {
+    try {
+      final response = await _dio.post('/issues/refresh', queryParameters: {'symbol': symbol});
+      return response.data;
+    } catch (e) { return null; }
+  }
+
 }

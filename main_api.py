@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from core.stock_service import get_stock_info, find_ticker, get_stock_news
 from core.database import init_db, get_session, engine
-from core.models import User, UserCreate, UserRead, Token, TradingStrategy, StrategyCreate, StrategyRead, StockAsset, AISentimentHistory, APIKeyConfig, Guru, GuruInsight
+from core.models import User, UserCreate, UserRead, Token, TradingStrategy, StrategyCreate, StrategyRead, StockAsset, AISentimentHistory, APIKeyConfig, Guru, GuruInsight, NewsArticle
 from core.auth import get_password_hash, verify_password, create_access_token, decode_access_token
 from core.trade_service import TradeService
 from core.broker import TradingBroker
@@ -21,7 +21,7 @@ from core.hybrid_strategy import HybridStrategyEngine
 from core.notification_service import notification_service
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import select
+from sqlmodel import select, or_
 from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Set, Optional
 from datetime import datetime
@@ -545,9 +545,121 @@ async def get_active_ai_status(current_user: User = Depends(get_current_user), s
         "masked_key": masked_key,
         "healthy": is_healthy,
         "status": "정상 (ACTIVE)" if is_healthy else "점검 필요",
-        "quota_status": "무제한 / 로컬" if provider == "OLLAMA" else "1,500 RPD (Free Tier)",
         "remaining_estimate": "100%" if provider == "OLLAMA" else "98% (충분함)"
     }
+
+# --- Real-time Issues & Guru Feed (DB Caching deduplication) ---
+@app.get("/issues/feed")
+async def get_issues_feed(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    symbol: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    stmt = select(NewsArticle).order_by(NewsArticle.published_at.desc())
+    if category and category != "ALL":
+        stmt = stmt.where(NewsArticle.category == category)
+    if symbol and symbol != "ALL":
+        stmt = stmt.where(NewsArticle.symbol == symbol.upper())
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        stmt = stmt.where(or_(NewsArticle.title.ilike(term), NewsArticle.summary.ilike(term), NewsArticle.publisher.ilike(term)))
+
+    articles = (await session.execute(stmt.limit(50))).scalars().all()
+
+    # DB에 수집된 이슈가 적은 경우 자동 외부 수집 및 DB 캐싱 (중복 URL 저장 방지)
+    if len(articles) < 3:
+        target_sym = symbol if (symbol and symbol != "ALL") else "AAPL"
+        raw_news = await ai_service.get_stock_news(target_sym)
+        for n in raw_news:
+            link = n.get("link") or f"https://finance.yahoo.com/quote/{target_sym}?ts={datetime.utcnow().timestamp()}"
+            existing = (await session.execute(select(NewsArticle).where(NewsArticle.link == link))).scalar_one_or_none()
+            if not existing:
+                title = n.get("title", f"{target_sym} 시장 주요 이슈")
+                publisher = n.get("publisher", "Market News")
+                pub_time = datetime.fromtimestamp(n.get("providerPublishTime")) if n.get("providerPublishTime") else datetime.utcnow()
+                
+                lower_title = title.lower()
+                is_bullish = any(w in lower_title for w in ["up", "growth", "high", "rally", "gain", "surge", "record"])
+                is_bearish = any(w in lower_title for w in ["drop", "fall", "down", "loss", "crash", "plunge", "cut"])
+                
+                sentiment_str = "Bullish" if is_bullish else ("Bearish" if is_bearish else "Neutral")
+                sentiment_val = 78 if is_bullish else (32 if is_bearish else 50)
+                
+                new_art = NewsArticle(
+                    symbol=target_sym,
+                    title=title,
+                    publisher=publisher,
+                    link=link,
+                    published_at=pub_time,
+                    summary=f"[{publisher}] {title} - AI 수집 데이터",
+                    sentiment=sentiment_str,
+                    sentiment_score=sentiment_val,
+                    category="NEWS"
+                )
+                session.add(new_art)
+
+        guru_posts = await social_service.fetch_guru_tweets(target_sym)
+        for g in guru_posts:
+            g_link = f"https://twitter.com/{g['handle']}/{g['guru']}"
+            existing = (await session.execute(select(NewsArticle).where(NewsArticle.link == g_link))).scalar_one_or_none()
+            if not existing:
+                new_g = NewsArticle(
+                    symbol=target_sym,
+                    title=f"💬 {g['guru']} ({g['handle']}) 핵심 발언",
+                    publisher=g['guru'],
+                    link=g_link,
+                    published_at=datetime.utcnow(),
+                    summary=g['content'],
+                    sentiment="Bullish" if any(w in g['content'].lower() for w in ["disruption", "improving", "strong"]) else "Neutral",
+                    sentiment_score=82 if "improving" in g['content'].lower() else 60,
+                    category="GURU"
+                )
+                session.add(new_g)
+
+        await session.commit()
+        articles = (await session.execute(stmt.limit(50))).scalars().all()
+
+    return {
+        "count": len(articles),
+        "cached_db": True,
+        "articles": [a.dict() for a in articles]
+    }
+
+@app.post("/issues/refresh")
+async def refresh_issues_feed(
+    symbol: Optional[str] = "AAPL",
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    target_sym = symbol.upper() if symbol else "AAPL"
+    raw_news = await ai_service.get_stock_news(target_sym)
+    new_count = 0
+
+    for n in raw_news:
+        link = n.get("link") or f"https://finance.yahoo.com/quote/{target_sym}?ts={datetime.utcnow().timestamp()}"
+        existing = (await session.execute(select(NewsArticle).where(NewsArticle.link == link))).scalar_one_or_none()
+        if not existing:
+            title = n.get("title", f"{target_sym} 최신 이슈")
+            publisher = n.get("publisher", "Market Wire")
+            pub_time = datetime.fromtimestamp(n.get("providerPublishTime")) if n.get("providerPublishTime") else datetime.utcnow()
+            new_art = NewsArticle(
+                symbol=target_sym,
+                title=title,
+                publisher=publisher,
+                link=link,
+                published_at=pub_time,
+                summary=f"[{publisher}] {title}",
+                sentiment="Bullish" if any(w in title.lower() for w in ["up", "growth", "high", "rally"]) else "Neutral",
+                sentiment_score=75 if any(w in title.lower() for w in ["up", "growth"]) else 50,
+                category="NEWS"
+            )
+            session.add(new_art)
+            new_count += 1
+
+    await session.commit()
+    return {"status": "success", "new_articles_count": new_count}
 
 # --- AI Sentiment ---
 @app.get("/stock/{symbol}/sentiment")

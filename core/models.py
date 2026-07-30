@@ -134,6 +134,20 @@ class APIKeyConfig(SQLModel, table=True):
 
     user: User = Relationship(back_populates="api_keys")
 
+# 💡 실시간 이슈 및 뉴스 보관 캐시 테이블 (중복 호출 방지)
+class NewsArticle(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    symbol: str = Field(default="MARKET", index=True) # 종목 코드 또는 카테고리
+    title: str = Field(index=True)
+    publisher: str
+    link: str = Field(unique=True, index=True) # 원문 URL (중복 수집 방지)
+    published_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    summary: Optional[str] = None
+    sentiment: Optional[str] = None # Bullish, Bearish, Neutral
+    sentiment_score: Optional[int] = Field(default=50) # 0~100
+    category: str = Field(default="NEWS", index=True) # NEWS, GURU, ISSUE
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
 class StrategyCreate(TradingStrategyBase):
     pass
 
