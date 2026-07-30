@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
+import '../services/url_launcher_service.dart';
 import '../widgets/ai_header_banner.dart';
 import 'package:intl/intl.dart';
 
@@ -59,6 +60,30 @@ class _IssueScreenState extends State<IssueScreen> {
     );
     await _apiService.refreshIssuesFeed();
     await _fetchIssues();
+  }
+
+  void _openUrlInNewTab(String linkUrl, String symbol) {
+    String targetUrl = linkUrl.trim();
+    if (targetUrl.isEmpty || targetUrl == 'null') {
+      targetUrl = 'https://finance.yahoo.com/quote/${symbol.isNotEmpty ? symbol : 'AAPL'}';
+    } else if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      targetUrl = 'https://$targetUrl';
+    }
+    
+    // Direct HTML window.open execution for Flutter Web
+    launchInNewTab(targetUrl);
+    
+    // Fallback attempt via url_launcher_string
+    try {
+      launchUrl(Uri.parse(targetUrl), mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank');
+    } catch (_) {}
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('🔗 새 탭에서 원문으로 이동합니다: $targetUrl'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -210,27 +235,6 @@ class _IssueScreenState extends State<IssueScreen> {
     );
   }
 
-  Future<void> _openUrlInNewTab(String linkUrl) async {
-    if (linkUrl.isEmpty) return;
-    try {
-      final Uri uri = Uri.parse(linkUrl);
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-        webOnlyWindowName: '_blank',
-      );
-      if (!launched) {
-        await launchUrl(uri, webOnlyWindowName: '_blank');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('🔗 원문 주소: $linkUrl')),
-        );
-      }
-    }
-  }
-
   Widget _buildArticleCard(dynamic item) {
     final title = item['title'] ?? '';
     final publisher = item['publisher'] ?? 'Market';
@@ -306,7 +310,7 @@ class _IssueScreenState extends State<IssueScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                onPressed: () => _openUrlInNewTab(link),
+                onPressed: () => _openUrlInNewTab(link, (item['symbol'] ?? 'AAPL').toString()),
               ),
             ],
           ),
