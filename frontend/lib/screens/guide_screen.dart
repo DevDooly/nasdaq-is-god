@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/ai_header_banner.dart';
 
 class GuideScreen extends StatelessWidget {
   const GuideScreen({super.key});
@@ -11,11 +12,15 @@ class GuideScreen extends StatelessWidget {
         title: const Text('📖 주식 매매기법 & AI 하이브리드 가이드북'),
         backgroundColor: const Color(0xFF0F172A),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: Column(
+        children: [
+          const AiHeaderBanner(),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
             // 1. 헤더 배너
             Container(
               width: double.infinity,
@@ -131,6 +136,9 @@ class GuideScreen extends StatelessWidget {
           ],
         ),
       ),
+    ),
+  ],
+),
     );
   }
 

@@ -348,4 +348,11 @@ class ApiService {
     } catch (e) { return null; }
   }
 
+  Future<Map<String, dynamic>?> getActiveAiStatus() async {
+    try {
+      final response = await _dio.get('/settings/ai-status');
+      return response.data;
+    } catch (e) { return null; }
+  }
+
 }

@@ -8,6 +8,7 @@ import 'guru_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
 import 'guide_screen.dart';
+import '../widgets/ai_header_banner.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
@@ -102,34 +103,31 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
-    final results = await Future.wait([
-      _apiService.getMe(),
-      _apiService.getPortfolio(),
-      _apiService.getPortfolioHistory(),
-    ]);
-    
-    if (mounted) {
-      setState(() {
-        _userInfo = results[0] as Map<String, dynamic>?;
-        final portfolioRaw = results[1] as Map<String, dynamic>?;
-        if (portfolioRaw != null) {
-          final assetsList = portfolioRaw['assets'] as List;
-          _portfolio = assetsList.map((item) => StockAsset.fromJson(item)).toList();
-          _summary = portfolioRaw['summary'] as Map<String, dynamic>?;
-        }
-        _equityHistory = results[2] as List<dynamic>?;
-        _isLoading = false;
-      });
-    }
+    try {
+      final results = await Future.wait([
+        _apiService.getMe(),
+        _apiService.getPortfolio(),
+        _apiService.getPortfolioHistory(),
+        _apiService.getMarketSentiment(),
+      ]);
 
-    // 💡 시장 감정 분석은 무한 로딩 방지를 위해 백그라운드 비동기로 로딩
-    _apiService.getMarketSentiment().then((sentiment) {
       if (mounted) {
         setState(() {
-          _marketSentiment = sentiment;
+          _userInfo = results[0] as Map<String, dynamic>?;
+          final portData = results[1] as Map<String, dynamic>?;
+          if (portData != null) {
+            _summary = portData['summary'];
+            final assetsList = portData['assets'] as List<dynamic>?;
+            _portfolio = assetsList?.map((e) => StockAsset.fromJson(e)).toList();
+          }
+          _equityHistory = results[2] as List<dynamic>?;
+          _marketSentiment = results[3] as Map<String, dynamic>?;
+          _isLoading = false;
         });
       }
-    });
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
 
@@ -139,47 +137,54 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       backgroundColor: const Color(0xFF020617),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
-          : Row(
+          : Column(
               children: [
-                if (MediaQuery.of(context).size.width > 900) _buildSidebar(),
+                const AiHeaderBanner(),
                 Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _fetchData,
-                    color: Colors.cyanAccent,
-                    child: CustomScrollView(
-                      slivers: [
-                        _buildAppBar(),
-                        SliverPadding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                          sliver: SliverToBoxAdapter(child: _buildTopRow()),
-                        ),
-                        SliverPadding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          sliver: SliverToBoxAdapter(child: _buildEquityCurveSection()),
-                        ),
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-                          sliver: SliverToBoxAdapter(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('포트폴리오 요약', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                                TextButton.icon(
-                                  onPressed: _showLiquidationDialog, 
-                                  icon: const Icon(Icons.bolt, color: Colors.redAccent, size: 16), 
-                                  label: const Text('전량 매도', style: TextStyle(color: Colors.redAccent, fontSize: 13))
+                  child: Row(
+                    children: [
+                      if (MediaQuery.of(context).size.width > 900) _buildSidebar(),
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: _fetchData,
+                          color: Colors.cyanAccent,
+                          child: CustomScrollView(
+                            slivers: [
+                              _buildAppBar(),
+                              SliverPadding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                                sliver: SliverToBoxAdapter(child: _buildTopRow()),
+                              ),
+                              SliverPadding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                sliver: SliverToBoxAdapter(child: _buildEquityCurveSection()),
+                              ),
+                              SliverPadding(
+                                padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+                                sliver: SliverToBoxAdapter(
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('포트폴리오 요약', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                      TextButton.icon(
+                                        onPressed: _showLiquidationDialog, 
+                                        icon: const Icon(Icons.bolt, color: Colors.redAccent, size: 16), 
+                                        label: const Text('전량 매도', style: TextStyle(color: Colors.redAccent, fontSize: 13))
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ],
-                            ),
+                              ),
+                              SliverPadding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                sliver: _buildAssetSliverList(),
+                              ),
+                              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                            ],
                           ),
                         ),
-                        SliverPadding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          sliver: _buildAssetSliverList(),
-                        ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ],

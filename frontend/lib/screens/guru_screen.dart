@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../widgets/ai_header_banner.dart';
 import 'package:intl/intl.dart';
 
 class GuruScreen extends StatefulWidget {
@@ -53,7 +54,6 @@ class _GuruScreenState extends State<GuruScreen> with SingleTickerProviderStateM
         }
       },
       child: Scaffold(
-
       backgroundColor: const Color(0xFF020617),
       appBar: AppBar(
         title: const Text('GURU ALPHA', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
@@ -73,7 +73,6 @@ class _GuruScreenState extends State<GuruScreen> with SingleTickerProviderStateM
           ),
         ],
         bottom: TabBar(
-
           controller: _tabController,
           indicatorColor: Colors.purpleAccent,
           labelColor: Colors.purpleAccent,
@@ -87,12 +86,19 @@ class _GuruScreenState extends State<GuruScreen> with SingleTickerProviderStateM
       ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator(color: Colors.purpleAccent))
-        : TabBarView(
-            controller: _tabController,
+        : Column(
             children: [
-              _buildTimelineTab(),
-              _buildArchiveTab(),
-              _buildDirectoryTab(),
+              const AiHeaderBanner(),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildTimelineTab(),
+                    _buildArchiveTab(),
+                    _buildDirectoryTab(),
+                  ],
+                ),
+              ),
             ],
           ),
       floatingActionButton: (_tabController.index == 0 && _gurus.isNotEmpty) ? FloatingActionButton(

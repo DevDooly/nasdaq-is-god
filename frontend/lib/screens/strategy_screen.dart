@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/strategy.dart';
+import '../widgets/ai_header_banner.dart';
 import 'dart:convert';
 
 class StrategyScreen extends StatefulWidget {
@@ -211,11 +212,18 @@ class _StrategyScreenState extends State<StrategyScreen> with SingleTickerProvid
             ],
           ),
         ),
-        body: TabBarView(
-          controller: _tabController,
+        body: Column(
           children: [
-            _buildSimulatorTab(),
-            _buildActiveStrategiesTab(),
+            const AiHeaderBanner(),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildSimulatorTab(),
+                  _buildActiveStrategiesTab(),
+                ],
+              ),
+            ),
           ],
         ),
       ),

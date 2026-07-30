@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../widgets/ai_header_banner.dart';
 import 'package:intl/intl.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -136,32 +137,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: const Color(0xFF0F172A),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
-            : Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('AI PROVIDERS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
-                    const SizedBox(height: 8),
-                    const Text(
-                      '여러 AI 프로바이더를 등록하고 관리할 수 있습니다. 활성화된 프로바이더가 분석에 사용됩니다.',
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
+            : Column(
+                children: [
+                  const AiHeaderBanner(),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('AI PROVIDERS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
+                          const SizedBox(height: 8),
+                          const Text(
+                            '여러 AI 프로바이더를 등록하고 관리할 수 있습니다. 활성화된 프로바이더가 분석에 사용됩니다.',
+                            style: TextStyle(color: Colors.grey, fontSize: 13),
+                          ),
+                          const SizedBox(height: 32),
+                          Expanded(
+                            child: _apiKeys == null || _apiKeys!.isEmpty
+                                ? _buildEmptyState()
+                                : ListView.separated(
+                                    itemCount: _apiKeys!.length,
+                                    separatorBuilder: (context, index) => const SizedBox(height: 12),
+                                    itemBuilder: (context, index) {
+                                      final key = _apiKeys![index];
+                                      return _buildKeyCard(key);
+                                    },
+                                  ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 32),
-                    Expanded(
-                      child: _apiKeys == null || _apiKeys!.isEmpty
-                          ? _buildEmptyState()
-                          : ListView.separated(
-                              itemCount: _apiKeys!.length,
-                              separatorBuilder: (context, index) => const SizedBox(height: 12),
-                              itemBuilder: (context, index) {
-                                final key = _apiKeys![index];
-                                return _buildKeyCard(key);
-                              },
-                            ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _showAddKeyDialog,

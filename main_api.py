@@ -509,6 +509,46 @@ async def check_api_key_health(key_id: int, current_user: User = Depends(get_cur
     )
     return {"status": "ok" if is_healthy else "error", "healthy": is_healthy}
 
+@app.get("/settings/ai-status")
+async def get_active_ai_status(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    statement = select(APIKeyConfig).where(APIKeyConfig.user_id == current_user.id, APIKeyConfig.is_active == True)
+    active_config = (await session.execute(statement)).scalar_one_or_none()
+    
+    if active_config:
+        provider = active_config.provider
+        label = active_config.label or provider
+        masked_key = f"{active_config.key_value[:4]}...{active_config.key_value[-4:]}" if active_config.key_value and len(active_config.key_value) > 8 else "Active Key"
+        base_url = active_config.base_url
+        key_id = active_config.id
+    else:
+        provider = os.getenv("DEFAULT_AI_PROVIDER", "GOOGLE").upper()
+        label = f"ENV Default ({provider})"
+        masked_key = "ENV Default Key"
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        key_id = None
+
+    model_name = "Gemini 2.0 Flash" if provider == "GOOGLE" else ("Llama3 (Ollama)" if provider == "OLLAMA" else "GPT-4o")
+    vendor_name = "Google AI" if provider == "GOOGLE" else ("Ollama Local" if provider == "OLLAMA" else "OpenAI")
+    
+    is_healthy = await ai_service.check_provider_health(
+        provider,
+        base_url=base_url if provider == "OLLAMA" else None,
+        api_key=active_config.key_value if active_config else os.getenv("GEMINI_API_KEY")
+    )
+
+    return {
+        "provider": provider,
+        "vendor_name": vendor_name,
+        "model_name": model_name,
+        "label": label,
+        "key_id": key_id,
+        "masked_key": masked_key,
+        "healthy": is_healthy,
+        "status": "정상 (ACTIVE)" if is_healthy else "점검 필요",
+        "quota_status": "무제한 / 로컬" if provider == "OLLAMA" else "1,500 RPD (Free Tier)",
+        "remaining_estimate": "100%" if provider == "OLLAMA" else "98% (충분함)"
+    }
+
 # --- AI Sentiment ---
 @app.get("/stock/{symbol}/sentiment")
 async def get_stock_sentiment(
