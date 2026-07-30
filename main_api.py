@@ -308,17 +308,34 @@ async def guru_feed_worker():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await wait_for_db()
-    await init_db()
-    await ensure_default_data()
-    worker_task = asyncio.create_task(trading_worker.start(interval_seconds=60))
-    broadcaster_task = asyncio.create_task(price_broadcaster())
-    guru_task = asyncio.create_task(guru_feed_worker())
+    try:
+        await wait_for_db()
+        await init_db()
+        await ensure_default_data()
+    except Exception as e:
+        logger.error(f"⚠️ Initial database setup warning (API server remains active): {e}")
+
+    worker_task = None
+    broadcaster_task = None
+    guru_task = None
+
+    try:
+        worker_task = asyncio.create_task(trading_worker.start(interval_seconds=60))
+        broadcaster_task = asyncio.create_task(price_broadcaster())
+        guru_task = asyncio.create_task(guru_feed_worker())
+    except Exception as e:
+        logger.error(f"⚠️ Background worker launch warning: {e}")
+
     yield
-    trading_worker.stop()
-    worker_task.cancel()
-    broadcaster_task.cancel()
-    guru_task.cancel()
+
+    try:
+        trading_worker.stop()
+        if worker_task: worker_task.cancel()
+        if broadcaster_task: broadcaster_task.cancel()
+        if guru_task: guru_task.cancel()
+    except Exception:
+        pass
+
 
 
 

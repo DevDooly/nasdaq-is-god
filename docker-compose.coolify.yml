@@ -9,14 +9,8 @@ services:
       POSTGRES_DB: nasdaq_god
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    logging:
-      driver: fluentd
-      options:
-        fluentd-address: "localhost:24224"
-        tag: "nasdaq-db"
-        fluentd-async: "true"
 
-  # 2. 백엔드 API (FastAPI - JSON 구조화 로깅)
+  # 2. 백엔드 API (FastAPI)
   backend:
     build:
       context: .
@@ -32,12 +26,6 @@ services:
       - "9095:9000"
     depends_on:
       - db
-    logging:
-      driver: fluentd
-      options:
-        fluentd-address: "localhost:24224"
-        tag: "nasdaq-backend"
-        fluentd-async: "true"
 
   # 3. 프론트엔드 Web (Nginx)
   frontend:
@@ -49,12 +37,6 @@ services:
       - "8081:80"
     depends_on:
       - backend
-    logging:
-      driver: fluentd
-      options:
-        fluentd-address: "localhost:24224"
-        tag: "nasdaq-frontend"
-        fluentd-async: "true"
 
   # 4. 텔레그램 트레이딩/알림 봇 (Optional)
   bot:
@@ -69,12 +51,6 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
       - backend
-    logging:
-      driver: fluentd
-      options:
-        fluentd-address: "localhost:24224"
-        tag: "nasdaq-bot"
-        fluentd-async: "true"
 
 volumes:
   postgres_data:
