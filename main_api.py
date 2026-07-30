@@ -25,9 +25,10 @@ import os
 import asyncio
 import logging
 import json
-
+import random
 import time
 import traceback
+
 from collections import deque
 
 # --- 상세 로깅 & EFK 연동 체계 구축 ---
@@ -233,11 +234,8 @@ async def fetch_and_analyze_guru_feeds():
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with async_session() as session:
         gurus = (await session.execute(select(Guru).where(Guru.is_active == True))).scalars().all()
-        if not gurus:
-            return
-
-        import random
         feed_templates = {
+
             "Donald Trump": [
                 {"symbol": "DJT", "content": "Tariffs on foreign competitors will bring manufacturing back to the USA at record speed. American AI power is unstoppable!"},
                 {"symbol": "BTC", "content": "Strategic Bitcoin Reserve will make America the undisputed crypto superpower of the world!"},
