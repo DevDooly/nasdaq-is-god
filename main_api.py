@@ -348,8 +348,18 @@ async def log_requests(request: Request, call_next):
         logger.error(traceback.format_exc())
         raise exc
 
+@app.get("/")
+async def root():
+    return {
+        "message": "Nasdaq is God API - Real-time Ready",
+        "environment": "development (dev branch)",
+        "pipeline_status": "SOP Standard Verified",
+        "version": "1.2.0"
+    }
+
 @app.get("/system/logs")
 async def get_system_logs(limit: int = 100):
+
     """실시간 시스템 및 API 동작 라이브 로그 조회 엔드포인트"""
     logs_list = list(log_buffer)
     return {
