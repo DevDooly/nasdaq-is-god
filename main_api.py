@@ -548,7 +548,7 @@ async def get_active_ai_status(current_user: User = Depends(get_current_user), s
         "remaining_estimate": "100%" if provider == "OLLAMA" else "98% (충분함)"
     }
 
-# --- Real-time Issues & Guru Feed (DB Caching deduplication) ---
+# --- Real-time Issues & Guru Feed (DB Caching & Dynamic Fallback Search) ---
 @app.get("/issues/feed")
 async def get_issues_feed(
     q: Optional[str] = None,
@@ -557,6 +557,8 @@ async def get_issues_feed(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
+    from core.news_scraper import news_scraper
+
     stmt = select(NewsArticle).order_by(NewsArticle.published_at.desc())
     if category and category != "ALL":
         stmt = stmt.where(NewsArticle.category == category)
@@ -568,57 +570,11 @@ async def get_issues_feed(
 
     articles = (await session.execute(stmt.limit(50))).scalars().all()
 
-    # DB에 수집된 이슈가 적은 경우 자동 외부 수집 및 DB 캐싱 (중복 URL 저장 방지)
+    # DB에 캐시된 데이터가 부족하거나 검색어에 결과가 없을 경우 동적 수집 후 DB 보관
     if len(articles) < 3:
-        target_sym = symbol if (symbol and symbol != "ALL") else "AAPL"
-        raw_news = await ai_service.get_stock_news(target_sym)
-        for n in raw_news:
-            link = n.get("link") or f"https://finance.yahoo.com/quote/{target_sym}?ts={datetime.utcnow().timestamp()}"
-            existing = (await session.execute(select(NewsArticle).where(NewsArticle.link == link))).scalar_one_or_none()
-            if not existing:
-                title = n.get("title", f"{target_sym} 시장 주요 이슈")
-                publisher = n.get("publisher", "Market News")
-                pub_time = datetime.fromtimestamp(n.get("providerPublishTime")) if n.get("providerPublishTime") else datetime.utcnow()
-                
-                lower_title = title.lower()
-                is_bullish = any(w in lower_title for w in ["up", "growth", "high", "rally", "gain", "surge", "record"])
-                is_bearish = any(w in lower_title for w in ["drop", "fall", "down", "loss", "crash", "plunge", "cut"])
-                
-                sentiment_str = "Bullish" if is_bullish else ("Bearish" if is_bearish else "Neutral")
-                sentiment_val = 78 if is_bullish else (32 if is_bearish else 50)
-                
-                new_art = NewsArticle(
-                    symbol=target_sym,
-                    title=title,
-                    publisher=publisher,
-                    link=link,
-                    published_at=pub_time,
-                    summary=f"[{publisher}] {title} - AI 수집 데이터",
-                    sentiment=sentiment_str,
-                    sentiment_score=sentiment_val,
-                    category="NEWS"
-                )
-                session.add(new_art)
-
-        guru_posts = await social_service.fetch_guru_tweets(target_sym)
-        for g in guru_posts:
-            g_link = f"https://twitter.com/{g['handle']}/{g['guru']}"
-            existing = (await session.execute(select(NewsArticle).where(NewsArticle.link == g_link))).scalar_one_or_none()
-            if not existing:
-                new_g = NewsArticle(
-                    symbol=target_sym,
-                    title=f"💬 {g['guru']} ({g['handle']}) 핵심 발언",
-                    publisher=g['guru'],
-                    link=g_link,
-                    published_at=datetime.utcnow(),
-                    summary=g['content'],
-                    sentiment="Bullish" if any(w in g['content'].lower() for w in ["disruption", "improving", "strong"]) else "Neutral",
-                    sentiment_score=82 if "improving" in g['content'].lower() else 60,
-                    category="GURU"
-                )
-                session.add(new_g)
-
-        await session.commit()
+        target_sym = symbol if (symbol and symbol != "ALL") else (q.upper().strip() if (q and len(q.strip()) <= 5 and q.strip().isalpha()) else "TSLA")
+        await news_scraper.fetch_and_cache_symbol_news(session, target_sym)
+        await news_scraper.run_batch_scrape(session)
         articles = (await session.execute(stmt.limit(50))).scalars().all()
 
     return {

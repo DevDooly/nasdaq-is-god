@@ -66,6 +66,15 @@ class TradingWorker:
                 except Exception as e:
                     logger.error(f"Error processing strategy {strategy.id}: {e}")
 
+            # 4. 실시간 주요 이슈 및 인물 발언 주기적 스크랩 & DB 캐싱 (중복 방지)
+            try:
+                from core.news_scraper import news_scraper
+                added = await news_scraper.run_batch_scrape(session)
+                if added > 0:
+                    logger.info(f"📰 [Batch Scraper] Cached {added} news & guru posts into DB.")
+            except Exception as e:
+                logger.error(f"Failed in batch news scraper: {e}")
+
     async def start(self, interval_seconds: int = 60):
         self.is_running = True
         while self.is_running:
