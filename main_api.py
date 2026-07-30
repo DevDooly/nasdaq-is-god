@@ -221,6 +221,33 @@ async def ensure_default_data():
                     session.add(ins)
                 await session.commit()
 
+            # 3. 기본 뉴스 및 이슈 데이터 시딩 (DB 캐싱 초기화)
+            statement_news = select(NewsArticle)
+            result_news = await session.execute(statement_news)
+            if not result_news.scalars().first():
+                logger.info("📰 기본 뉴스 및 이슈 데이터 시딩 중...")
+                from scripts.seed_news import INITIAL_ARTICLES
+                for item in INITIAL_ARTICLES:
+                    art = NewsArticle(
+                        symbol=item["symbol"],
+                        title=item["title"],
+                        publisher=item["publisher"],
+                        link=item["link"],
+                        published_at=datetime.utcnow(),
+                        summary=item["summary"],
+                        sentiment=item["sentiment"],
+                        sentiment_score=item["sentiment_score"],
+                        category=item["category"]
+                    )
+                    session.add(art)
+                await session.commit()
+
+                try:
+                    from core.news_scraper import news_scraper
+                    await news_scraper.run_batch_scrape(session)
+                except Exception as e:
+                    logger.error(f"News scraper batch error during startup: {e}")
+
     except Exception as e:
         logger.error(f"⚠️ 데이터 시딩 오류 발생 (서버는 정상 구동됩니다): {e}")
 

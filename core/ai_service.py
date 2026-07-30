@@ -193,3 +193,5 @@ class AIService:
         except Exception as e:
             logger.error(f"Health check failed for {provider}: {e}")
             return False
+
+ai_service = AIService()
