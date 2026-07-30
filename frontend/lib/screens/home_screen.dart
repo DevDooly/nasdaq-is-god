@@ -7,6 +7,7 @@ import 'strategy_screen.dart';
 import 'guru_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
+import 'guide_screen.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
@@ -299,6 +300,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 _sidebarMenuItem(Icons.dashboard, '대시보드', true, isExpanded),
                 _sidebarMenuItem(Icons.psychology, 'AI 대가 분석', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GuruScreen()))),
                 _sidebarMenuItem(Icons.settings_suggest, '매매 전략', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const StrategyScreen()))),
+                _sidebarMenuItem(Icons.menu_book, '전략 가이드북', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GuideScreen()))),
                 _sidebarMenuItem(Icons.history, '거래 내역', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TradeHistoryScreen()))),
                 _sidebarMenuItem(Icons.settings, '시스템 설정', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()))),
               ],
