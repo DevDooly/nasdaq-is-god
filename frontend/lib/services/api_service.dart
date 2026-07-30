@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
-import 'dart:html' as html;
+import 'web_storage.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class ApiService {
@@ -49,7 +49,7 @@ class ApiService {
   Future<String?> getValidToken() async {
     if (_backupToken != null) return _backupToken;
     String? token;
-    if (kIsWeb) { try { token = html.window.localStorage['jwt_token']; } catch (e) {} }
+    if (kIsWeb) { try { token = WebStorage.getItem('jwt_token'); } catch (e) {} }
     if (token == null) { try { token = await _storage.read(key: 'jwt_token'); } catch (e) {} }
     _backupToken = token;
     return token;
@@ -63,7 +63,7 @@ class ApiService {
         final token = response.data['access_token'];
         if (token != null) {
           _backupToken = token;
-          if (kIsWeb) { try { html.window.localStorage['jwt_token'] = token; } catch (e) {} }
+          if (kIsWeb) { try { WebStorage.setItem('jwt_token', token); } catch (e) {} }
           try { await _storage.write(key: 'jwt_token', value: token); } catch (e) {}
           return response.data;
         }
@@ -88,7 +88,7 @@ class ApiService {
 
   Future<void> logout() async {
     _backupToken = null;
-    if (kIsWeb) { try { html.window.localStorage.remove('jwt_token'); } catch (e) {} }
+    if (kIsWeb) { try { WebStorage.removeItem('jwt_token'); } catch (e) {} }
     try { await _storage.delete(key: 'jwt_token'); } catch (e) {}
   }
 

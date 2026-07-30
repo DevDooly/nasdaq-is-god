@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query, Depends, status, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from core.stock_service import get_stock_info, find_ticker, get_stock_news
 from core.database import init_db, get_session, engine
 from core.models import User, UserCreate, UserRead, Token, TradingStrategy, StrategyCreate, StrategyRead, StockAsset, AISentimentHistory, APIKeyConfig, Guru, GuruInsight
@@ -13,6 +14,7 @@ from core.indicator_service import IndicatorService
 from core.strategy_service import StrategyService
 from core.ai_service import AIService
 from core.worker import TradingWorker
+from core.backtest_engine import BacktestEngine
 from core.notification_service import notification_service
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -807,6 +809,28 @@ async def delete_strategy(strategy_id: int, current_user: User = Depends(get_cur
     await session.delete(db_strategy)
     await session.commit()
     return {"status": "success"}
+
+class BacktestRequest(BaseModel):
+    symbol: str = "AAPL"
+    strategy_type: str = "SMA_CROSSOVER"
+    parameters: Dict[str, Any] = {}
+    period: str = "1y"
+    initial_capital: float = 10000.0
+
+@app.post("/backtest")
+async def run_backtest_api(req: BacktestRequest):
+    try:
+        engine = BacktestEngine(initial_capital=req.initial_capital)
+        result = engine.run_backtest(
+            symbol=req.symbol,
+            strategy_type=req.strategy_type,
+            params=req.parameters,
+            period=req.period
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Backtest error for {req.symbol}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/")
 async def root(): return {"message": "Nasdaq is God API - Real-time Ready"}
