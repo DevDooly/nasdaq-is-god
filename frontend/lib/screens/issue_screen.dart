@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../widgets/ai_header_banner.dart';
 import 'package:intl/intl.dart';
@@ -209,6 +210,27 @@ class _IssueScreenState extends State<IssueScreen> {
     );
   }
 
+  Future<void> _openUrlInNewTab(String linkUrl) async {
+    if (linkUrl.isEmpty) return;
+    try {
+      final Uri uri = Uri.parse(linkUrl);
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+        webOnlyWindowName: '_blank',
+      );
+      if (!launched) {
+        await launchUrl(uri, webOnlyWindowName: '_blank');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('🔗 원문 주소: $linkUrl')),
+        );
+      }
+    }
+  }
+
   Widget _buildArticleCard(dynamic item) {
     final title = item['title'] ?? '';
     final publisher = item['publisher'] ?? 'Market';
@@ -217,6 +239,7 @@ class _IssueScreenState extends State<IssueScreen> {
     final score = item['sentiment_score'] ?? 50;
     final category = item['category'] ?? 'NEWS';
     final pubAt = item['published_at'] != null ? DateFormat('MM-dd HH:mm').format(DateTime.parse(item['published_at'])) : '';
+    final link = item['link'] ?? '';
 
     Color sentColor = Colors.grey;
     if (sentiment == 'Bullish') sentColor = Colors.greenAccent;
@@ -271,19 +294,19 @@ class _IssueScreenState extends State<IssueScreen> {
           Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           Text(summary, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton.icon(
-                icon: const Icon(Icons.launch, size: 14, color: Color(0xFF06B6D4)),
-                label: const Text('원문/출처 확인', style: TextStyle(color: Color(0xFF06B6D4), fontSize: 12)),
-                onPressed: () {
-                  final link = item['link'] ?? '';
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('🔗 원문 주소: $link')),
-                  );
-                },
+              ElevatedButton.icon(
+                icon: const Icon(Icons.open_in_new, size: 14, color: Colors.white),
+                label: const Text('🔗 원문 이동 (새 창)', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF06B6D4),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () => _openUrlInNewTab(link),
               ),
             ],
           ),
