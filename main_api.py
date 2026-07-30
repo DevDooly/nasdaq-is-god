@@ -17,6 +17,7 @@ from core.worker import TradingWorker
 from core.backtest_engine import BacktestEngine
 from core.social_service import SocialService
 from core.sentiment_engine import SentimentEngine
+from core.hybrid_strategy import HybridStrategyEngine
 from core.notification_service import notification_service
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -83,8 +84,9 @@ indicator_service = IndicatorService()
 ai_service = AIService()
 social_service = SocialService()
 sentiment_engine = SentimentEngine(ai_service, social_service)
+hybrid_strategy_engine = HybridStrategyEngine(indicator_service, sentiment_engine)
 trade_service = TradeService(broker)
-strategy_service = StrategyService(indicator_service)
+strategy_service = StrategyService(indicator_service, hybrid_engine=hybrid_strategy_engine)
 trading_worker = TradingWorker(strategy_service, trade_service)
 
 
@@ -850,6 +852,30 @@ async def get_sentiment_history(symbol: str, session: AsyncSession = Depends(get
     stmt = select(AISentimentHistory).where(AISentimentHistory.symbol == symbol).order_by(AISentimentHistory.created_at.desc()).limit(30)
     res = await session.execute(stmt)
     return res.scalars().all()
+
+class HybridEvaluateRequest(BaseModel):
+    symbol: str = "AAPL"
+    strategy_type: str = "HYBRID_ALL"
+    tech_weight: float = 0.6
+    buy_threshold: float = 70.0
+    sell_threshold: float = 35.0
+    parameters: Dict[str, Any] = {}
+
+@app.post("/hybrid/evaluate")
+async def evaluate_hybrid_strategy(req: HybridEvaluateRequest):
+    try:
+        result = await hybrid_strategy_engine.evaluate_hybrid_signal(
+            symbol=req.symbol,
+            strategy_type=req.strategy_type,
+            tech_weight=req.tech_weight,
+            buy_threshold=req.buy_threshold,
+            sell_threshold=req.sell_threshold,
+            params=req.parameters
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Hybrid evaluation error for {req.symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 async def root(): return {"message": "Nasdaq is God API - Real-time Ready"}
