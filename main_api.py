@@ -18,6 +18,7 @@ from core.backtest_engine import BacktestEngine
 from core.social_service import SocialService
 from core.sentiment_engine import SentimentEngine
 from core.hybrid_strategy import HybridStrategyEngine
+from core.agents import MultiAgentOrchestrator
 from core.notification_service import notification_service
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -85,6 +86,7 @@ ai_service = AIService()
 social_service = SocialService()
 sentiment_engine = SentimentEngine(ai_service, social_service)
 hybrid_strategy_engine = HybridStrategyEngine(indicator_service, sentiment_engine)
+multi_agent_orchestrator = MultiAgentOrchestrator(indicator_service, sentiment_engine)
 trade_service = TradeService(broker)
 strategy_service = StrategyService(indicator_service, hybrid_engine=hybrid_strategy_engine)
 trading_worker = TradingWorker(strategy_service, trade_service)
@@ -1010,6 +1012,28 @@ async def evaluate_hybrid_strategy(req: HybridEvaluateRequest):
         return result
     except Exception as e:
         logger.error(f"Hybrid evaluation error for {req.symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class HedgeFundEvaluateRequest(BaseModel):
+    symbol: str = "AAPL"
+    total_balance: float = 10000.0
+    weights: Optional[Dict[str, float]] = None
+
+@app.post("/agents/hedge-fund/evaluate")
+async def evaluate_hedge_fund_board(req: HedgeFundEvaluateRequest):
+    """
+    AI 헤지펀드 이사회(멀티 에이전트) 종합 진단 엔드포인트.
+    Technical, Valuation, Sentiment, Guru 페르소나, Risk Manager 및 Portfolio Manager의 진단 결과를 반환합니다.
+    """
+    try:
+        decision = await multi_agent_orchestrator.run_hedge_fund_pipeline(
+            symbol=req.symbol,
+            total_balance=req.total_balance,
+            weights=req.weights
+        )
+        return decision.model_dump()
+    except Exception as e:
+        logger.error(f"Hedge Fund Board evaluation error for {req.symbol}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
