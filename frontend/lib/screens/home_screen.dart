@@ -9,6 +9,7 @@ import 'settings_screen.dart';
 import 'login_screen.dart';
 import 'guide_screen.dart';
 import 'issue_screen.dart';
+import 'hedge_fund_board_screen.dart';
 import '../widgets/ai_header_banner.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
@@ -308,7 +309,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 _sidebarMenuItem(Icons.psychology, 'AI 대가 분석', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GuruScreen()))),
                 _sidebarMenuItem(Icons.settings_suggest, '매매 전략', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const StrategyScreen()))),
                 _sidebarMenuItem(Icons.menu_book, '전략 가이드북', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GuideScreen()))),
-                _sidebarMenuItem(Icons.history, '거래 내역', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TradeHistoryScreen()))),
+                _sidebarMenuItem(Icons.gavel, 'AI 헤지펀드 이사회 (Admin)', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const HedgeFundBoardScreen()))),
+                _sidebarMenuItem(Icons.history, '거래 내역 & AI 로그', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TradeHistoryScreen()))),
                 _sidebarMenuItem(Icons.settings, '시스템 설정', false, isExpanded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()))),
               ],
             ),

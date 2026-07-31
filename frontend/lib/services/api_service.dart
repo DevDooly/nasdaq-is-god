@@ -374,4 +374,32 @@ class ApiService {
     } catch (e) { return null; }
   }
 
+  // 💡 멀티 에이전트 AI 헤지펀드 이사회 API
+  Future<Map<String, dynamic>?> evaluateHedgeFundBoard(String symbol, {double totalBalance = 10000.0}) async {
+    try {
+      final response = await _dio.post('/agents/hedge-fund/evaluate', data: {
+        'symbol': symbol,
+        'total_balance': totalBalance,
+      });
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<List<dynamic>?> getHedgeFundBoardHistory({int limit = 50}) async {
+    try {
+      final response = await _dio.get('/agents/hedge-fund/history', queryParameters: {'limit': limit});
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<Map<String, dynamic>?> simulateBatchHedgeFund({List<String>? symbols, double totalBalance = 50000.0}) async {
+    try {
+      final response = await _dio.post('/agents/hedge-fund/simulate-batch', data: {
+        'symbols': symbols ?? ['NVDA', 'TSLA', 'AAPL', 'MSFT', 'AMZN'],
+        'total_balance': totalBalance,
+      });
+      return response.data;
+    } catch (e) { return null; }
+  }
+
 }

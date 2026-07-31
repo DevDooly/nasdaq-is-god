@@ -4,7 +4,10 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from core.stock_service import get_stock_info, find_ticker, get_stock_news
 from core.database import init_db, get_session, engine
-from core.models import User, UserCreate, UserRead, Token, TradingStrategy, StrategyCreate, StrategyRead, StockAsset, AISentimentHistory, APIKeyConfig, Guru, GuruInsight, NewsArticle
+from core.models import (
+    User, UserCreate, UserRead, Token, StockAsset, TradeLog, TradingStrategy,
+    StrategyCreate, StrategyRead, EquitySnapshot, AISentimentHistory, Guru, GuruInsight, APIKeyConfig, NewsArticle, HedgeFundBoardLog
+)
 from core.auth import get_password_hash, verify_password, create_access_token, decode_access_token
 from core.trade_service import TradeService
 from core.broker import TradingBroker
@@ -1020,10 +1023,10 @@ class HedgeFundEvaluateRequest(BaseModel):
     weights: Optional[Dict[str, float]] = None
 
 @app.post("/agents/hedge-fund/evaluate")
-async def evaluate_hedge_fund_board(req: HedgeFundEvaluateRequest):
+async def evaluate_hedge_fund_board(req: HedgeFundEvaluateRequest, session: AsyncSession = Depends(get_session)):
     """
     AI 헤지펀드 이사회(멀티 에이전트) 종합 진단 엔드포인트.
-    Technical, Valuation, Sentiment, Guru 페르소나, Risk Manager 및 Portfolio Manager의 진단 결과를 반환합니다.
+    진단 및 매매 추천 결과를 DB(HedgeFundBoardLog)에 기록하고 반환합니다.
     """
     try:
         decision = await multi_agent_orchestrator.run_hedge_fund_pipeline(
@@ -1031,10 +1034,82 @@ async def evaluate_hedge_fund_board(req: HedgeFundEvaluateRequest):
             total_balance=req.total_balance,
             weights=req.weights
         )
+        
+        # DB 로그 기록 (DB 연결이 유효할 때만 연동)
+        try:
+            signals_dict = {k: v.model_dump() for k, v in decision.agent_signals.items()}
+            risk_dict = decision.risk_metrics.model_dump() if decision.risk_metrics else {}
+            
+            log_entry = HedgeFundBoardLog(
+                symbol=decision.symbol,
+                final_action=decision.final_action,
+                confidence_score=decision.confidence_score,
+                target_quantity=decision.target_quantity,
+                risk_approved=decision.risk_approval,
+                agent_signals_json=json.dumps(signals_dict, ensure_ascii=False),
+                risk_metrics_json=json.dumps(risk_dict, ensure_ascii=False),
+                decision_rationale=decision.decision_rationale
+            )
+            session.add(log_entry)
+            await session.commit()
+        except Exception as db_err:
+            logger.warning(f"Failed to log HedgeFundBoardLog into DB (continuing): {db_err}")
+
         return decision.model_dump()
     except Exception as e:
         logger.error(f"Hedge Fund Board evaluation error for {req.symbol}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/agents/hedge-fund/history")
+async def get_hedge_fund_board_history(limit: int = 50, session: AsyncSession = Depends(get_session)):
+    """
+    AI 헤지펀드 이사회 진단 및 시뮬레이션 거래 기록 히스토리를 반환합니다.
+    """
+    try:
+        stmt = select(HedgeFundBoardLog).order_by(HedgeFundBoardLog.created_at.desc()).limit(limit)
+        res = await session.execute(stmt)
+        logs = res.scalars().all()
+        return logs
+    except Exception as e:
+        logger.error(f"Failed to fetch hedge fund board history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class BatchSimulateRequest(BaseModel):
+    symbols: List[str] = ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN"]
+    total_balance: float = 50000.0
+
+@app.post("/agents/hedge-fund/simulate-batch")
+async def simulate_batch_hedge_fund(req: BatchSimulateRequest, session: AsyncSession = Depends(get_session)):
+    """
+    관리자용 일괄 종목 AI 헤지펀드 이사회 시뮬레이션 및 포트폴리오 진단 실행 엔드포인트.
+    """
+    results = []
+    for symbol in req.symbols:
+        try:
+            decision = await multi_agent_orchestrator.run_hedge_fund_pipeline(
+                symbol=symbol,
+                total_balance=req.total_balance
+            )
+            signals_dict = {k: v.model_dump() for k, v in decision.agent_signals.items()}
+            risk_dict = decision.risk_metrics.model_dump() if decision.risk_metrics else {}
+
+            log_entry = HedgeFundBoardLog(
+                symbol=decision.symbol,
+                final_action=decision.final_action,
+                confidence_score=decision.confidence_score,
+                target_quantity=decision.target_quantity,
+                risk_approved=decision.risk_approval,
+                agent_signals_json=json.dumps(signals_dict, ensure_ascii=False),
+                risk_metrics_json=json.dumps(risk_dict, ensure_ascii=False),
+                decision_rationale=decision.decision_rationale
+            )
+            session.add(log_entry)
+            results.append(decision.model_dump())
+        except Exception as e:
+            logger.error(f"Error in batch simulation for {symbol}: {e}")
+
+    await session.commit()
+    return {"status": "success", "count": len(results), "results": results}
 
 @app.get("/")
 async def root(): return {"message": "Nasdaq is God API - Real-time Ready"}

@@ -155,3 +155,16 @@ class StrategyRead(TradingStrategyBase):
     id: int
     user_id: int
     created_at: datetime
+
+class HedgeFundBoardLog(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    symbol: str = Field(index=True)
+    final_action: str = Field(index=True) # BUY, SELL, HOLD
+    confidence_score: float
+    target_quantity: int = Field(default=0)
+    risk_approved: bool = Field(default=True)
+    agent_signals_json: str = Field(default="{}") # 각 에이전트 브리핑 JSON
+    risk_metrics_json: str = Field(default="{}")   # 리스크 매니저 리포트 JSON
+    decision_rationale: str                        # 이사회 최종 판정 근거 요약 (한국어)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
