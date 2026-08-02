@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../widgets/ai_header_banner.dart';
+import 'home_screen.dart';
 
 class MonitoringScreen extends StatefulWidget {
   const MonitoringScreen({super.key});
@@ -25,6 +26,17 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
   void initState() {
     super.initState();
     _fetchTargets();
+  }
+
+  void _navigateToHome() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+      );
+    }
   }
 
   @override
@@ -149,33 +161,44 @@ class _MonitoringScreenState extends State<MonitoringScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        title: const Text('🎯 모니터링 대상 관제 대시보드'),
-        backgroundColor: const Color(0xFF1E293B),
-      ),
-      body: Column(
-        children: [
-          const AiHeaderBanner(),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : RefreshIndicator(
-                    onRefresh: _fetchTargets,
-                    child: ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        _buildStatusHeaderCard(),
-                        const SizedBox(height: 20),
-                        _buildSymbolsSection(),
-                        const SizedBox(height: 24),
-                        _buildGurusSection(),
-                      ],
-                    ),
-                  ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _navigateToHome();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        appBar: AppBar(
+          title: const Text('🎯 모니터링 대상 관제 대시보드'),
+          backgroundColor: const Color(0xFF1E293B),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: _navigateToHome,
           ),
-        ],
+        ),
+        body: Column(
+          children: [
+            const AiHeaderBanner(),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : RefreshIndicator(
+                      onRefresh: _fetchTargets,
+                      child: ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          _buildStatusHeaderCard(),
+                          const SizedBox(height: 20),
+                          _buildSymbolsSection(),
+                          const SizedBox(height: 24),
+                          _buildGurusSection(),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
