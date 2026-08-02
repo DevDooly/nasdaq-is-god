@@ -22,6 +22,7 @@ from core.social_service import SocialService
 from core.sentiment_engine import SentimentEngine
 from core.hybrid_strategy import HybridStrategyEngine
 from core.agents import MultiAgentOrchestrator
+from core.scheduler import BatchCollectorScheduler
 from core.notification_service import notification_service
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -90,6 +91,7 @@ social_service = SocialService()
 sentiment_engine = SentimentEngine(ai_service, social_service)
 hybrid_strategy_engine = HybridStrategyEngine(indicator_service, sentiment_engine)
 multi_agent_orchestrator = MultiAgentOrchestrator(indicator_service, sentiment_engine)
+batch_collector_scheduler = BatchCollectorScheduler()
 trade_service = TradeService(broker)
 strategy_service = StrategyService(indicator_service, hybrid_engine=hybrid_strategy_engine)
 trading_worker = TradingWorker(strategy_service, trade_service)
@@ -355,6 +357,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"⚠️ Initial database setup warning (API server remains active): {e}")
 
+    try:
+        batch_collector_scheduler.start()
+    except Exception as e:
+        logger.error(f"⚠️ Batch scheduler start error: {e}")
+
     worker_task = None
     broadcaster_task = None
     guru_task = None
@@ -369,6 +376,7 @@ async def lifespan(app: FastAPI):
     yield
 
     try:
+        batch_collector_scheduler.stop()
         trading_worker.stop()
         if worker_task: worker_task.cancel()
         if broadcaster_task: broadcaster_task.cancel()
@@ -1110,5 +1118,34 @@ async def simulate_batch_hedge_fund(req: BatchSimulateRequest, session: AsyncSes
 
     await session.commit()
     return {"status": "success", "count": len(results), "results": results}
+
+@app.post("/batch/trigger-news")
+async def trigger_news_batch():
+    """뉴스 수집 배치 직후 수동 실행 엔드포인트"""
+    asyncio.create_task(batch_collector_scheduler.fetch_news_batch())
+    return {"status": "started", "message": "News collection batch triggered."}
+
+@app.post("/batch/trigger-gurus")
+async def trigger_gurus_batch():
+    """월가 거장 발언 수집 배치 수동 실행 엔드포인트"""
+    asyncio.create_task(batch_collector_scheduler.fetch_guru_insights_batch())
+    return {"status": "started", "message": "Guru insights collection batch triggered."}
+
+@app.get("/batch/status")
+async def get_batch_status():
+    """배치 스케줄러 상태 및 등록된 태스크 목록 반환"""
+    jobs = []
+    if batch_collector_scheduler.scheduler.running:
+        for job in batch_collector_scheduler.scheduler.get_jobs():
+            jobs.append({
+                "id": job.id,
+                "name": job.name,
+                "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None
+            })
+    return {
+        "running": batch_collector_scheduler.scheduler.running,
+        "job_count": len(jobs),
+        "jobs": jobs
+    }
 
 if __name__ == "__main__": uvicorn.run(app, host="0.0.0.0", port=9000)
