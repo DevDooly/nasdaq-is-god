@@ -31,13 +31,8 @@ async def test_batch_scheduler_init_and_start():
 async def test_fetch_news_batch():
     scheduler = BatchCollectorScheduler(target_symbols=["AAPL"])
     
-    mock_articles = [
-        {"title": "Apple News 1", "link": "http://example.com/1", "publisher": "Reuters", "summary": "Summary 1"}
-    ]
-
-    with patch("core.scheduler.get_stock_news", new_callable=AsyncMock) as mock_get_news:
-        mock_get_news.return_value = mock_articles
+    with patch("core.scheduler.news_scraper.run_batch_scrape", new_callable=AsyncMock) as mock_scrape:
+        mock_scrape.return_value = 2
         
-        # 비동기 함수 실행 테스트 (오류 없이 구동)
         await scheduler.fetch_news_batch()
-        mock_get_news.assert_called()
+        mock_scrape.assert_called()

@@ -9,10 +9,11 @@ from typing import List
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlmodel import select, or_
 
-from core.database import engine, get_session
+from core.database import get_session
 from core.models import NewsArticle, GuruInsight, Guru
 from core.stock_service import get_stock_news
 from core.social_service import SocialService
+from core.news_scraper import news_scraper
 from core.ai_service import AIService
 from core.sentiment_engine import SentimentEngine
 
@@ -36,7 +37,7 @@ class BatchCollectorScheduler:
         self.sentiment_engine = SentimentEngine(self.ai_service, self.social_service)
 
     def start(self):
-        """배치 태스크 스케줄러를 시작합니다."""
+        """배치 태스크 스케줄러를 시작하며, 시작 즉시 1회 동시 수집(Initial Catch-up)을 수행합니다."""
         if not self.scheduler.running:
             # 1. 10분 마다 뉴스 자동 배치 수집
             self.scheduler.add_job(
@@ -65,6 +66,16 @@ class BatchCollectorScheduler:
             self.scheduler.start()
             logger.info("⏰ BatchCollectorScheduler successfully started with interval jobs (News: 10m, Guru: 5m, AI: 15m).")
 
+            # 시작 즉시 1회 비동기로 실행하여 최신 데이터 채움
+            asyncio.create_task(self._initial_catchup())
+
+    async def _initial_catchup(self):
+        """서버 구동 시 초기 데이터 동기화를 위해 수집 및 진단을 즉시 실행합니다."""
+        logger.info("🔄 Running initial catch-up for news and guru insights...")
+        await self.fetch_news_batch()
+        await self.fetch_guru_insights_batch()
+        await self.analyze_pending_sentiments_batch()
+
     def stop(self):
         """배치 스케줄러를 정지합니다."""
         if self.scheduler.running:
@@ -72,40 +83,13 @@ class BatchCollectorScheduler:
             logger.info("⏹️ BatchCollectorScheduler stopped.")
 
     async def fetch_news_batch(self):
-        """주요 대상 종목에 대한 실시간 뉴스 수집 및 중복 체크 후 DB 저장 배치 태스크."""
+        """주요 대상 종목에 대한 실시간 뉴스 수집 및 DB 저장 배치 태스크."""
         logger.info(f"📰 [Batch Task] Starting news collection for {self.target_symbols}...")
-        count = 0
         try:
             async for session in get_session():
-                for symbol in self.target_symbols:
-                    articles = await get_stock_news(symbol)
-                    for item in articles[:5]: # 종목당 최신 5개
-                        title = item.get("title")
-                        link = item.get("link")
-                        publisher = item.get("publisher", "Yahoo Finance")
-                        
-                        if not title or not link:
-                            continue
-
-                        # 중복 수집 체크
-                        stmt = select(NewsArticle).where(NewsArticle.link == link)
-                        res = await session.execute(stmt)
-                        existing = res.scalars().first()
-
-                        if not existing:
-                            article = NewsArticle(
-                                symbol=symbol,
-                                title=title,
-                                publisher=publisher,
-                                link=link,
-                                summary=item.get("summary", ""),
-                                category="NEWS"
-                            )
-                            session.add(article)
-                            count += 1
-                await session.commit()
+                count = await news_scraper.run_batch_scrape(session)
+                logger.info(f"✅ [Batch Task] News collection completed. {count} new items cached.")
                 break
-            logger.info(f"✅ [Batch Task] News collection completed. {count} new articles saved.")
         except Exception as e:
             logger.error(f"❌ [Batch Task] News collection error: {e}")
 
@@ -115,36 +99,34 @@ class BatchCollectorScheduler:
         count = 0
         try:
             async for session in get_session():
-                # DB의 활성화된 Guru 목록 가져오기
                 stmt = select(Guru).where(Guru.is_active == True)
                 res = await session.execute(stmt)
                 gurus = res.scalars().all()
 
                 for guru in gurus:
-                    # 각 거장별 연관 종목 소셜 데이터 수집
                     symbols = [s.strip() for s in guru.target_symbols.split(",") if s.strip()] or ["TSLA", "NVDA"]
                     for sym in symbols:
-                        posts = await self.social_service.get_stocktwits_feed(sym)
+                        posts = await self.social_service.fetch_guru_tweets(sym)
                         for post in posts[:3]:
-                            body = post.get("body", "")
-                            if not body:
+                            content = post.get("content", "")
+                            if not content:
                                 continue
 
-                            # 최근 24시간 내 동일 원문 체크
                             stmt_check = select(GuruInsight).where(
                                 GuruInsight.guru_id == guru.id,
-                                GuruInsight.content == body
+                                GuruInsight.content == content
                             )
                             check_res = await session.execute(stmt_check)
                             if not check_res.scalars().first():
                                 insight = GuruInsight(
                                     guru_id=guru.id,
                                     symbol=sym,
-                                    content=body,
-                                    sentiment=post.get("sentiment", "Neutral"),
-                                    score=50,
-                                    summary=body[:100],
-                                    reason="Batch collected social statement"
+                                    content=content,
+                                    sentiment="Bullish" if any(w in content.lower() for w in ["ai", "growth", "strong", "disruption"]) else "Neutral",
+                                    score=80 if "ai" in content.lower() else 50,
+                                    summary=content[:100],
+                                    reason="Live batch collected guru statement",
+                                    timestamp=datetime.utcnow() # 최신 타임스탬프 설정
                                 )
                                 session.add(insight)
                                 count += 1
