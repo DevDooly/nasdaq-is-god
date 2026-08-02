@@ -320,6 +320,7 @@ async def fetch_and_analyze_guru_feeds():
                 stock_data = await get_stock_info(item["symbol"])
                 price = stock_data.get("currentPrice", 100.0) if isinstance(stock_data, dict) and "error" not in stock_data else 100.0
 
+                now_time = datetime.utcnow()
                 new_insight = GuruInsight(
                     guru_id=guru.id,
                     symbol=item["symbol"],
@@ -329,9 +330,25 @@ async def fetch_and_analyze_guru_feeds():
                     summary=summary,
                     reason=reason,
                     price_at_timestamp=price,
-                    timestamp=datetime.utcnow()
+                    timestamp=now_time
                 )
                 session.add(new_insight)
+
+                # 💡 실시간 이슈 & 인물 발언 피드(NewsArticle)로 자동 연동
+                news_link = f"https://twitter.com/{guru.handle}/{item['symbol']}_{int(now_time.timestamp())}"
+                news_art = NewsArticle(
+                    symbol=item["symbol"],
+                    title=f"💬 {guru.name} ({guru.handle}) 핵심 발언",
+                    publisher=guru.name,
+                    link=news_link,
+                    published_at=now_time,
+                    summary=summary,
+                    sentiment=sentiment,
+                    sentiment_score=score,
+                    category="GURU"
+                )
+                session.add(news_art)
+
                 await session.commit()
                 logger.info(f"✅ [Guru Feed] {guru.name} 신규 발언 AI 분석 완료: {summary}")
 

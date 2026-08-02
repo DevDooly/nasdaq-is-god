@@ -118,6 +118,7 @@ class BatchCollectorScheduler:
                             )
                             check_res = await session.execute(stmt_check)
                             if not check_res.scalars().first():
+                                now_time = datetime.utcnow()
                                 insight = GuruInsight(
                                     guru_id=guru.id,
                                     symbol=sym,
@@ -126,9 +127,24 @@ class BatchCollectorScheduler:
                                     score=80 if "ai" in content.lower() else 50,
                                     summary=content[:100],
                                     reason="Live batch collected guru statement",
-                                    timestamp=datetime.utcnow() # 최신 타임스탬프 설정
+                                    timestamp=now_time
                                 )
                                 session.add(insight)
+
+                                # 💡 실시간 이슈 & 발언 피드(NewsArticle)로 자동 동기화
+                                news_link = f"https://twitter.com/{guru.handle}/{sym}_{int(now_time.timestamp())}"
+                                news_art = NewsArticle(
+                                    symbol=sym,
+                                    title=f"💬 {guru.name} ({guru.handle}) 핵심 발언",
+                                    publisher=guru.name,
+                                    link=news_link,
+                                    published_at=now_time,
+                                    summary=content,
+                                    sentiment=insight.sentiment,
+                                    sentiment_score=insight.score,
+                                    category="GURU"
+                                )
+                                session.add(news_art)
                                 count += 1
                 await session.commit()
                 break
