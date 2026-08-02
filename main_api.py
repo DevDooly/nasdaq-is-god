@@ -407,7 +407,7 @@ async def log_requests(request: Request, call_next):
 async def root():
     return {
         "message": "Nasdaq is God API - Real-time Ready",
-        "environment": "development (dev branch)",
+        "environment": "production (main branch)",
         "pipeline_status": "SOP Standard Verified",
         "version": "1.2.0"
     }
@@ -1110,8 +1110,5 @@ async def simulate_batch_hedge_fund(req: BatchSimulateRequest, session: AsyncSes
 
     await session.commit()
     return {"status": "success", "count": len(results), "results": results}
-
-@app.get("/")
-async def root(): return {"message": "Nasdaq is God API - Real-time Ready", "environment": "production (main branch)", "version": "1.2.0"}
 
 if __name__ == "__main__": uvicorn.run(app, host="0.0.0.0", port=9000)
