@@ -402,4 +402,35 @@ class ApiService {
     } catch (e) { return null; }
   }
 
+  // 💡 모니터링 대상 관리 API
+  Future<Map<String, dynamic>?> getMonitoringTargets() async {
+    try {
+      final response = await _dio.get('/monitoring/targets');
+      return response.data;
+    } catch (e) { return null; }
+  }
+
+  Future<bool> manageSymbolTarget(String symbol, String action) async {
+    try {
+      final response = await _dio.post('/monitoring/targets/symbols', data: {
+        'symbol': symbol,
+        'action': action,
+      });
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
+  Future<bool> manageGuruTarget({required String handle, required String action, String name = '', String description = '', String targetSymbols = 'TSLA,NVDA'}) async {
+    try {
+      final response = await _dio.post('/monitoring/targets/gurus', data: {
+        'name': name,
+        'handle': handle,
+        'description': description,
+        'target_symbols': targetSymbols,
+        'action': action,
+      });
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
 }

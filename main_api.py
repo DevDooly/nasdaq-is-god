@@ -1148,4 +1148,93 @@ async def get_batch_status():
         "jobs": jobs
     }
 
+class SymbolTargetRequest(BaseModel):
+    symbol: str
+    action: str = "ADD" # ADD, REMOVE
+
+class GuruTargetRequest(BaseModel):
+    name: str = ""
+    handle: str = ""
+    description: Optional[str] = ""
+    target_symbols: str = "TSLA,NVDA"
+    action: str = "ADD" # ADD, REMOVE, TOGGLE
+
+@app.get("/monitoring/targets")
+async def get_monitoring_targets(session: AsyncSession = Depends(get_session)):
+    """현재 모니터링 대상 종목 및 거장 리스트 반환 엔드포인트"""
+    gurus_data = []
+    try:
+        gurus_stmt = select(Guru)
+        gurus_res = await session.execute(gurus_stmt)
+        gurus = gurus_res.scalars().all()
+        gurus_data = [g.model_dump() for g in gurus]
+    except Exception as e:
+        logger.warning(f"Failed to fetch gurus from DB (fallback to empty): {e}")
+
+    symbols = batch_collector_scheduler.target_symbols
+
+    return {
+        "symbols": symbols,
+        "gurus": gurus_data,
+        "batch_running": batch_collector_scheduler.scheduler.running
+    }
+
+@app.post("/monitoring/targets/symbols")
+async def manage_symbol_target(req: SymbolTargetRequest):
+    """모니터링 대상 종목 추가/삭제 엔드포인트"""
+    sym = req.symbol.strip().upper()
+    if req.action == "ADD":
+        if sym not in batch_collector_scheduler.target_symbols:
+            batch_collector_scheduler.target_symbols.append(sym)
+    elif req.action == "REMOVE":
+        if sym in batch_collector_scheduler.target_symbols:
+            batch_collector_scheduler.target_symbols.remove(sym)
+
+    return {
+        "status": "success",
+        "symbol": sym,
+        "action": req.action,
+        "current_symbols": batch_collector_scheduler.target_symbols
+    }
+
+@app.post("/monitoring/targets/gurus")
+async def manage_guru_target(req: GuruTargetRequest, session: AsyncSession = Depends(get_session)):
+    """모니터링 대상 월가 대가(Guru) 추가/삭제/토글 엔드포인트"""
+    try:
+        if req.action == "TOGGLE":
+            stmt = select(Guru).where(Guru.handle == req.handle)
+            res = await session.execute(stmt)
+            guru = res.scalars().first()
+            if guru:
+                guru.is_active = not guru.is_active
+                await session.commit()
+                return {"status": "success", "guru": guru.model_dump()}
+        elif req.action == "ADD":
+            stmt = select(Guru).where(Guru.handle == req.handle)
+            res = await session.execute(stmt)
+            existing = res.scalars().first()
+            if not existing:
+                new_guru = Guru(
+                    name=req.name,
+                    handle=req.handle,
+                    description=req.description,
+                    target_symbols=req.target_symbols,
+                    is_active=True
+                )
+                session.add(new_guru)
+                await session.commit()
+                return {"status": "success", "guru": new_guru.model_dump()}
+        elif req.action == "REMOVE":
+            stmt = select(Guru).where(Guru.handle == req.handle)
+            res = await session.execute(stmt)
+            guru = res.scalars().first()
+            if guru:
+                await session.delete(guru)
+                await session.commit()
+                return {"status": "success", "removed_handle": req.handle}
+    except Exception as e:
+        logger.warning(f"Failed to manage guru in DB: {e}")
+
+    return {"status": "ignored"}
+
 if __name__ == "__main__": uvicorn.run(app, host="0.0.0.0", port=9000)
