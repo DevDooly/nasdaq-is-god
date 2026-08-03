@@ -616,6 +616,13 @@ async def get_issues_feed(
 ):
     from core.news_scraper import news_scraper
 
+    # 1. 즉시 수집 트리거 (최신 실시간 뉴스 확보)
+    target_sym = symbol if (symbol and symbol != "ALL") else (q.upper().strip() if (q and len(q.strip()) <= 5 and q.strip().isalpha()) else "NVDA")
+    try:
+        await news_scraper.fetch_and_cache_symbol_news(session, target_sym)
+    except Exception as e:
+        logger.warning(f"Live news scrape warning in feed: {e}")
+
     stmt = select(NewsArticle).order_by(NewsArticle.published_at.desc())
     if category and category != "ALL":
         stmt = stmt.where(NewsArticle.category == category)
@@ -626,13 +633,6 @@ async def get_issues_feed(
         stmt = stmt.where(or_(NewsArticle.title.ilike(term), NewsArticle.summary.ilike(term), NewsArticle.publisher.ilike(term)))
 
     articles = (await session.execute(stmt.limit(50))).scalars().all()
-
-    # DB에 캐시된 데이터가 부족하거나 검색어에 결과가 없을 경우 동적 수집 후 DB 보관
-    if len(articles) < 3:
-        target_sym = symbol if (symbol and symbol != "ALL") else (q.upper().strip() if (q and len(q.strip()) <= 5 and q.strip().isalpha()) else "TSLA")
-        await news_scraper.fetch_and_cache_symbol_news(session, target_sym)
-        await news_scraper.run_batch_scrape(session)
-        articles = (await session.execute(stmt.limit(50))).scalars().all()
 
     return {
         "count": len(articles),
@@ -646,33 +646,17 @@ async def refresh_issues_feed(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
+    from core.news_scraper import news_scraper
     target_sym = symbol.upper() if symbol else "AAPL"
-    raw_news = await ai_service.get_stock_news(target_sym)
-    new_count = 0
+    
+    # 💡 실시간 수집 및 배치 강제 동기화
+    new_count = await news_scraper.fetch_and_cache_symbol_news(session, target_sym)
+    await news_scraper.run_batch_scrape(session)
 
-    for n in raw_news:
-        link = n.get("link") or f"https://finance.yahoo.com/quote/{target_sym}?ts={datetime.utcnow().timestamp()}"
-        existing = (await session.execute(select(NewsArticle).where(NewsArticle.link == link))).scalar_one_or_none()
-        if not existing:
-            title = n.get("title", f"{target_sym} 최신 이슈")
-            publisher = n.get("publisher", "Market Wire")
-            pub_time = datetime.fromtimestamp(n.get("providerPublishTime")) if n.get("providerPublishTime") else datetime.utcnow()
-            new_art = NewsArticle(
-                symbol=target_sym,
-                title=title,
-                publisher=publisher,
-                link=link,
-                published_at=pub_time,
-                summary=f"[{publisher}] {title}",
-                sentiment="Bullish" if any(w in title.lower() for w in ["up", "growth", "high", "rally"]) else "Neutral",
-                sentiment_score=75 if any(w in title.lower() for w in ["up", "growth"]) else 50,
-                category="NEWS"
-            )
-            session.add(new_art)
-            new_count += 1
+    stmt = select(NewsArticle).order_by(NewsArticle.published_at.desc()).limit(50)
+    articles = (await session.execute(stmt)).scalars().all()
 
-    await session.commit()
-    return {"status": "success", "new_articles_count": new_count}
+    return {"status": "success", "new_count": new_count, "articles": [a.dict() for a in articles]}
 
 # --- AI Sentiment ---
 @app.get("/stock/{symbol}/sentiment")

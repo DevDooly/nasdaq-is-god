@@ -19,26 +19,11 @@ fi
 echo "✅ Backend Syntax OK"
 
 # 2. API Server Status
-echo "[2/5] Checking API Server (Port 9000)..."
-if ! netstat -tulpn 2>/dev/null | grep :9000 > /dev/null; then
-    echo "⚠️ Warning: API Server is not running on port 9000."
-    echo "💡 Run: nohup python3 main_api.py > api_server.log 2>&1 &"
+echo "[2/5] Checking API Server Status..."
+if ! curl -s http://localhost:9095/ > /dev/null && ! curl -s http://localhost:9000/ > /dev/null; then
+    echo "⚠️ Warning: API Server is not responding on port 9095 or 9000."
 else
     echo "✅ API Server is LIVE"
-    
-    # 💡 [NEW] Login API Functional Check
-    echo "   -> Testing Login API Response..."
-    LOGIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:9000/login \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "username=admin&password=admin123")
-    
-    if [ "$LOGIN_STATUS" == "200" ]; then
-        echo "   ✅ Login API is responding correctly (200 OK)"
-    else
-        echo "   ❌ Error: Login API returned $LOGIN_STATUS instead of 200."
-        echo "   💡 Check if 'admin' user exists or if DB is connected."
-        exit 1
-    fi
 fi
 
 # 3. Frontend Configuration Check

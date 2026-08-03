@@ -2,6 +2,10 @@
 멀티 에이전트 AI 헤지펀드 자동매매 시뮬레이터 (매수 체결 시나리오 포함).
 """
 
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+
 import asyncio
 import logging
 from typing import List, Dict
